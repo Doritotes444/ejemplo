@@ -16,10 +16,10 @@ import {
 import agentService from '../services/agentService'
 import MostradorMode from './voice/MostradorMode'
 import { useVoiceAgent } from '../hooks/useVoiceAgent'
+import { useAgent } from '../context/AgentContext'
 
 export default function AgentWidget() {
-  const [abierto, setAbierto] = useState(false)
-  const [modoMostradorAbierto, setModoMostradorAbierto] = useState(false)
+  const { chatAbierto, cerrarChat, modoVozAbierto, abrirModoVoz, cerrarModoVoz } = useAgent()
   const voiceAgent = useVoiceAgent()
   const [mensajes, setMensajes] = useState([
     {
@@ -44,11 +44,20 @@ export default function AgentWidget() {
   }
 
   useEffect(() => {
-    if (abierto) {
+    if (chatAbierto) {
       scrollToBottom()
       inputRef.current?.focus()
     }
-  }, [abierto, mensajes])
+  }, [chatAbierto, mensajes])
+
+  useEffect(() => {
+    if (!chatAbierto) return
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') cerrarChat()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [chatAbierto, cerrarChat])
 
   // Inicializar Web Speech API para soporte de voz nativo en navegadores
   useEffect(() => {
@@ -177,12 +186,12 @@ export default function AgentWidget() {
   ]
 
   return (
-    <aside aria-label="Asistente Virtual POS" className="fixed bottom-5 right-5 z-50 flex flex-col items-end">
+    <aside aria-label="Asistente Virtual POS" className={`fixed bottom-5 right-5 z-30 flex flex-col items-end ${!chatAbierto ? 'pointer-events-none' : ''}`}>
       {/* Ventana de Chat */}
-      {abierto && (
+      {chatAbierto && (
         <section
           aria-label="Ventana de conversación con el Asistente POS"
-          className="w-[380px] max-w-[92vw] h-[540px] max-h-[82vh] bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden mb-3 animate-in fade-in slide-in-from-bottom-5 duration-200"
+          className="w-[380px] max-w-[92vw] h-[540px] max-h-[82vh] bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden mb-3 animate-in fade-in slide-in-from-bottom-5 duration-200 pointer-events-auto"
         >
           {/* Header del Asistente */}
           <div className="bg-slate-900 px-4 py-3.5 flex items-center justify-between text-white border-b border-slate-800">
@@ -203,7 +212,7 @@ export default function AgentWidget() {
 
             <div className="flex items-center gap-1.5">
               <button
-                onClick={() => setModoMostradorAbierto(true)}
+                onClick={abrirModoVoz}
                 title="Abrir Modo Mostrador Manos Libres"
                 className="flex items-center gap-1 px-2.5 py-1 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/40 text-cyan-300 rounded-lg text-xs font-semibold active:scale-95 transition-all"
               >
@@ -218,7 +227,7 @@ export default function AgentWidget() {
                 <RotateCcw size={15} />
               </button>
               <button
-                onClick={() => setAbierto(false)}
+                onClick={cerrarChat}
                 title="Cerrar asistente"
                 className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
               >
@@ -441,34 +450,10 @@ export default function AgentWidget() {
         </section>
       )}
 
-      {/* Botones Flotantes Launcher */}
-      <div className="flex items-center gap-2">
-        <button
-          onClick={() => setModoMostradorAbierto(true)}
-          className="group flex items-center gap-2 px-3.5 py-3 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded-full shadow-xl hover:shadow-cyan-500/25 transition-all duration-200 active:scale-95"
-          title="Abrir Modo Mostrador por Voz (Manos Libres)"
-        >
-          <Mic size={18} className="animate-pulse text-cyan-200" />
-          <span className="font-semibold text-sm tracking-tight pr-0.5">Modo Voz</span>
-        </button>
-
-        <button
-          onClick={() => setAbierto(!abierto)}
-          className="group relative flex items-center gap-2 px-4 py-3 bg-slate-900 hover:bg-indigo-600 text-white rounded-full shadow-xl hover:shadow-indigo-500/25 transition-all duration-200 active:scale-95"
-        >
-          <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500 border-2 border-white"></span>
-          </span>
-          <Sparkles size={18} className="text-amber-300 group-hover:rotate-12 transition-transform" />
-          <span className="font-semibold text-sm tracking-tight pr-1">Chat IA</span>
-        </button>
-      </div>
-
       {/* Modal Inmersivo Modo Mostrador */}
       <MostradorMode
-        isOpen={modoMostradorAbierto}
-        onClose={() => setModoMostradorAbierto(false)}
+        isOpen={modoVozAbierto}
+        onClose={cerrarModoVoz}
         voiceAgent={voiceAgent}
       />
     </aside>

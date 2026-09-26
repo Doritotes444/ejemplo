@@ -26,6 +26,7 @@
 [✅] Sprint 8.1 — RBAC (Dueño vs. Cajero), Actividad del Día y Límite de Cajeros por Plan (COMPLETO)
 [✅] Sprint 8.2 — Transformación Web Informativa + Onboarding Educativo No Bloqueante (COMPLETO)
 [✅] Sprint 8.3 — Gobernanza RBAC en Asistente IA, Reabastecimiento con Costo y Latencia Cero (COMPLETO)
+[✅] Sprint 8.4 — Entitlements (Trial 15 Días), Normalización Errores 422, UI Pro en Header (COMPLETO)
 [ ] Sprint 9 — Despliegue y Activación de Hermes-3 en Producción (SIGUIENTE)
 ```
 
@@ -452,6 +453,30 @@
 > >   - `tests/test_agente_rbac_reabastecer.py`: 7/7 tests passing (menú RBAC, bloqueos pedagógicos, ventas propias, reabastecimiento con costo en BD y consulta de vencimientos).
 > >   - Suite de regresión global: 24/24 tests passing en `tests/test_agente_produccion.py` y `tests/test_fase2_backend_rbac.py`.
 > >   - Total de pruebas verificadas: 31/31 passing al 100%.
+
+---
+
+> [GEMINI PROPONE → ✅ GEMINI IMPLEMENTA] Sprint 8.4 — Entitlements (Trial 15 Días), Normalización Errores 422, UI Pro en Header
+> **Objetivo:** Resolver exposición de errores JSON en modal de cajero, corregir advertencias de consola y extensiones (`autoComplete`), centralizar el modelo de suscripción y prueba Pro de 15 días en backend con principio Fail-Closed, retirar botones flotantes que tapaban modales e integrar accesos contextuales en el Header con modal de conversión comercial.
+>
+> **Estado de Implementación:**
+> - [x] **Normalización de Errores y Calidad de Formularios:**
+>   - `frontend/src/utils/apiError.js`: Parseador centralizado para respuestas 422 de Pydantic v2. Mapea violaciones de contraseña a mensajes claros y pedagógicos en lenguaje humano sin exponer `value_error`, `loc` ni JSON crudo.
+>   - `usuarioService.js` y `Configuracion.jsx`: Integración de mensajes amigables y atributos estándar `autoComplete="name"`, `autoComplete="email"`, `autoComplete="new-password"`.
+> - [x] **Servicio Centralizado de Entitlements (Backend):**
+>   - `app/services/entitlement_service.py`: Fuente de verdad única para el trial de 15 días exactos en UTC (`math.ceil`) y validación de planes Pro.
+>   - `app/dependencies.py`: Desacoplado el bloqueo de login para que el POS básico (ventas, caja, inventario) continúe operando al 100% incluso si el trial vence (Regla SUB-09). Dependencia `require_pro_entitlement` creada para proteger funciones avanzadas.
+>   - `app/routers/agente.py`: Endpoints `/mensaje` y `/transcribir-audio` protegidos con `require_pro_entitlement` (HTTP 403 con código `PRO_REQUIRED`).
+>   - `auth_service.py` y `empresa_service.py`: Delegación de la inicialización del trial a `entitlement_service.inicializar_trial`.
+> - [x] **Arquitectura Frontend Desacoplada y UI en Header:**
+>   - `AgentContext.jsx`: Proveedor global que administra el estado del Asistente y sincroniza los entitlements de la empresa.
+>   - `Header.jsx`: Controles integrados de Modo Voz, Chat IA y píldora dinámica de suscripción (`✨ Prueba Pro (Xd)` o `Activar Pro`).
+>   - `AgentWidget.jsx`: Eliminados definitivamente los botones flotantes inferiores (`fixed bottom-5 right-5 z-50`) que se montaban encima de los modales. Ajustado z-index a `z-30` y soporte para cierre con tecla `Escape`.
+>   - `ModalUpsellPro.jsx`: Modal de conversión y enganche respetuoso, destacando beneficios probados y enlace directo a `/planes` o soporte.
+> - [x] **Verificación:**
+>   - `npm run build`: Compilación de producción limpia sin errores en 9.14s.
+>   - `pytest tests/test_entitlements_trial.py`: 6/6 tests passing.
+>   - Suite completa de backend: **86/86 tests passing, 0 fallos**.
 
 ---
 

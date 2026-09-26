@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app import models
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_pro_entitlement
 from app.services.agente.agent_orchestrator import AgentOrchestrator
 from app.services.agente.intent_provider import LLMProviderUnavailableError
 from app.services.agente.session_store import SessionStoreUnavailableError
@@ -49,7 +49,7 @@ class MensajeAgenteRespuesta(BaseModel):
 async def enviar_mensaje(
     payload: MensajeAgenteEntrada,
     db: Session = Depends(get_db),
-    current_user: models.Usuario = Depends(get_current_user),
+    current_user: models.Usuario = Depends(require_pro_entitlement),
 ):
     """Procesa un comando en lenguaje natural, manteniendo sesión y FSM."""
     try:
@@ -83,7 +83,7 @@ async def enviar_mensaje(
 )
 async def transcribir_audio(
     audio: UploadFile = File(...),
-    current_user: models.Usuario = Depends(get_current_user),
+    current_user: models.Usuario = Depends(require_pro_entitlement),
 ):
     """Fallback STT: recibe audio en formato Opus/WebM y devuelve el texto transcrito."""
     audio_bytes = await audio.read()

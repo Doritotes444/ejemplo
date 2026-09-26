@@ -18,12 +18,13 @@ def crear_empresa(data: EmpresaCrear, db: Session) -> models.Empresa:
             detail=f"Ya existe una empresa con NIT/Cédula '{data.nit_o_cedula}'",
         )
 
+    from app.services import entitlement_service
     empresa = models.Empresa(
         nombre_comercial=data.nombre_comercial,
         nit_o_cedula=data.nit_o_cedula,
         plan=models.PlanEmpresa.BASIC,
-        trial_expires_at=datetime.now(timezone.utc) + timedelta(days=30),
     )
+    entitlement_service.inicializar_trial(empresa)
     db.add(empresa)
     db.commit()
     db.refresh(empresa)

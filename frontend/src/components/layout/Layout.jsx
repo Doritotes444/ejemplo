@@ -4,6 +4,7 @@ import Sidebar from './Sidebar'
 import Header from './Header'
 import CartSidebar from '../CartSidebar'
 import AgentWidget from '../AgentWidget'
+import ModalUpsellPro from '../ModalUpsellPro'
 
 export default function Layout() {
   const [menuAbierto, setMenuAbierto] = useState(false)
@@ -24,6 +25,7 @@ export default function Layout() {
 
       <CartSidebar />
       <AgentWidget />
+      <ModalUpsellPro />
     </div>
   )
 }

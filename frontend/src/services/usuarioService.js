@@ -1,4 +1,5 @@
 import authService from './authService'
+import { parseApiError } from '../utils/apiError'
 
 const BASE = import.meta.env.VITE_API_URL || '/api'
 
@@ -25,7 +26,7 @@ const usuarioService = {
     const res = await authService.fetchAuth(`${BASE}/usuarios/empleados`)
     if (!res.ok) {
       const data = await parseJsonSafe(res)
-      throw new Error(data?.detail || 'Error al listar los cajeros del equipo')
+      throw new Error(parseApiError(data, 'Error al listar los cajeros del equipo'))
     }
     const data = await parseJsonSafe(res)
     return data || []
@@ -44,14 +45,16 @@ const usuarioService = {
 
     if (!res.ok) {
       const data = await parseJsonSafe(res)
-      const detail = data?.detail || 'Error al registrar cajero'
-      const err = new Error(typeof detail === 'string' ? detail : JSON.stringify(detail))
+      const detail = data?.detail
+      const mensajeLimpio = parseApiError(data, 'Error al registrar cajero')
+      const err = new Error(mensajeLimpio)
       err.status = res.status
       if (
         res.status === 403 &&
-        (typeof detail === 'string' &&
+        ((typeof detail === 'string' &&
           (detail.toLowerCase().includes('límite de 3 cajeros') ||
-            detail.includes('LIMIT_CAJEROS_REACHED')))
+            detail.includes('LIMIT_CAJEROS_REACHED'))) ||
+          mensajeLimpio.toLowerCase().includes('límite de 3 cajeros'))
       ) {
         err.isLimitReached = true
         err.code = 'LIMIT_CAJEROS_REACHED'
@@ -75,14 +78,16 @@ const usuarioService = {
 
     if (!res.ok) {
       const data = await parseJsonSafe(res)
-      const detail = data?.detail || 'Error al cambiar estado del cajero'
-      const err = new Error(typeof detail === 'string' ? detail : JSON.stringify(detail))
+      const detail = data?.detail
+      const mensajeLimpio = parseApiError(data, 'Error al cambiar estado del cajero')
+      const err = new Error(mensajeLimpio)
       err.status = res.status
       if (
         res.status === 403 &&
-        (typeof detail === 'string' &&
+        ((typeof detail === 'string' &&
           (detail.toLowerCase().includes('límite de 3 cajeros') ||
-            detail.includes('LIMIT_CAJEROS_REACHED')))
+            detail.includes('LIMIT_CAJEROS_REACHED'))) ||
+          mensajeLimpio.toLowerCase().includes('límite de 3 cajeros'))
       ) {
         err.isLimitReached = true
         err.code = 'LIMIT_CAJEROS_REACHED'

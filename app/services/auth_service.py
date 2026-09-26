@@ -115,12 +115,13 @@ def registrar_usuario_con_empresa(
         )
 
     try:
+        from app.services import entitlement_service
         empresa = models.Empresa(
             nombre_comercial=nombre_comercial.strip(),
             nit_o_cedula=nit_o_cedula.strip(),
-            trial_expires_at=datetime.now(timezone.utc) + timedelta(days=30),
             is_active=True,
         )
+        entitlement_service.inicializar_trial(empresa)
         db.add(empresa)
         db.flush()
 

@@ -26,7 +26,7 @@ export function CartProvider({ children }) {
     }
   }, [carrito])
 
-  const agregar = (producto) => {
+  const agregar = (producto, abrir = false) => {
     setCarrito(prev => {
       const existe = prev.find(i => i.id === producto.id)
       if (existe) {
@@ -40,7 +40,9 @@ export function CartProvider({ children }) {
       if (cantidad_inicial <= 0) return prev
       return [...prev, { ...producto, cantidad: cantidad_inicial }]
     })
-    setCarritoAbierto(true)
+    if (abrir) {
+      setCarritoAbierto(true)
+    }
   }
 
   const restar = (productoId) => {

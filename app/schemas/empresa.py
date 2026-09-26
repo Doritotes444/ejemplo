@@ -41,5 +41,12 @@ class EmpresaRespuesta(BaseModel):
     def dias_trial_restantes(self) -> int | None:
         if self.trial_expires_at is None:
             return None
-        delta = self.trial_expires_at - datetime.now(timezone.utc)
-        return max(0, delta.days)
+        trial_ts = self.trial_expires_at
+        if trial_ts.tzinfo is None:
+            trial_ts = trial_ts.replace(tzinfo=timezone.utc)
+        delta = trial_ts - datetime.now(timezone.utc)
+        segundos = delta.total_seconds()
+        if segundos <= 0:
+            return 0
+        import math
+        return math.ceil(segundos / 86400)

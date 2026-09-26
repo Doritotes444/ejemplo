@@ -465,8 +465,9 @@ export default function Configuracion() {
             </div>
 
             {errorForm && (
-              <div className="bg-red-50 border border-red-200 text-red-600 text-xs p-3 rounded-xl">
-                {errorForm}
+              <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs p-3.5 rounded-xl flex items-start gap-2.5 leading-relaxed">
+                <AlertTriangle size={16} className="shrink-0 text-rose-600 mt-0.5" />
+                <span className="flex-1 font-medium">{errorForm}</span>
               </div>
             )}
 
@@ -478,6 +479,7 @@ export default function Configuracion() {
                 <input
                   type="text"
                   required
+                  autoComplete="name"
                   placeholder="Ej: Paula Andrea"
                   value={formCajero.nombre}
                   onChange={(e) => setFormCajero({ ...formCajero, nombre: e.target.value })}
@@ -492,6 +494,7 @@ export default function Configuracion() {
                 <input
                   type="email"
                   required
+                  autoComplete="email"
                   placeholder="paula@tutienda.com"
                   value={formCajero.email}
                   onChange={(e) => setFormCajero({ ...formCajero, email: e.target.value })}
@@ -506,6 +509,7 @@ export default function Configuracion() {
                 <input
                   type="password"
                   required
+                  autoComplete="new-password"
                   placeholder="Mínimo 8 caracteres (Mayús, núm, símbolo)"
                   value={formCajero.password}
                   onChange={(e) => setFormCajero({ ...formCajero, password: e.target.value })}

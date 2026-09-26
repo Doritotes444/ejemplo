@@ -60,16 +60,35 @@ def get_current_user(
             detail="Empresa inactiva o no encontrada",
         )
 
-    trial_ts = empresa.trial_expires_at
-    if trial_ts is not None and trial_ts.tzinfo is None:
-        trial_ts = trial_ts.replace(tzinfo=timezone.utc)
-    if trial_ts and trial_ts < datetime.now(timezone.utc):
+    return usuario
+
+
+def require_pro_entitlement(
+    current_user: models.Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> models.Usuario:
+    """Verifica que la empresa del usuario autenticado tenga derecho de uso Pro (o trial de 15 días activo).
+    
+    Aplica principio Fail-Closed y aislamiento estricto por empresa.
+    """
+    empresa = db.query(models.Empresa).filter(
+        models.Empresa.id == current_user.empresa_id,
+        models.Empresa.is_active.is_(True),
+    ).first()
+
+    from app.services import entitlement_service
+    tiene_acceso, estado, meta = entitlement_service.verificar_acceso_pro(empresa)
+    if not tiene_acceso:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Tu período de prueba ha vencido. Contacta al administrador para activar tu plan.",
+            detail={
+                "code": "PRO_REQUIRED",
+                "message": "Esta función requiere el Plan Pro o una prueba activa de 15 días.",
+                "estado_suscripcion": estado,
+                "dias_trial_restantes": meta.get("dias_trial_restantes", 0),
+            },
         )
-
-    return usuario
+    return current_user
 
 
 def get_current_user_admin(
