@@ -607,3 +607,14 @@
 2. Landing con ≥ 1 imagen real animada (ken-burns) y ≥ 1 sección scroll-telling funcional.
 3. Checklist anti-AI-slop §2 del playbook: tokens nombrados, ≥ 3 layouts distintos entre secciones, textura ambiental activa.
 4. Gemini QA sin issues de severidad roja.
+
+---
+
+## Bitácora Sprint 9 — Despliegue
+
+### 2026-10-18 — Fix deploy Render: SQLAlchemy 2.1 cambió el driver default de PostgreSQL
+- **Síntoma:** `ModuleNotFoundError: No module named 'psycopg'` en `alembic upgrade head` y uvicorn. El servicio nunca abrió puerto ("No open ports detected").
+- **Causa:** `requirements.txt` declaraba `sqlalchemy>=2.0.30` sin tope → Render resolvió a SQLAlchemy 2.1 (salida 2026-09-24), que usa **psycopg3** por defecto para URLs `postgresql://`. Nuestro driver instalado es `psycopg2-binary`.
+- **Solución:** acotar `sqlalchemy>=2.0.30,<2.1` en `requirements.txt` (psycopg2 sigue siendo el default en 2.0.x).
+- **Verificación:** venv local con SQLAlchemy 2.0.52 queda incluido en el rango (sin reinstalación local); Dockerfile instala del mismo requirements; alembic y FastAPI comparten el mismo engine en `app/database.py`.
+- **Pendiente:** migración futura a SQLAlchemy 2.1 requeriría agregar `psycopg[binary]` y URL `postgresql+psycopg://`.

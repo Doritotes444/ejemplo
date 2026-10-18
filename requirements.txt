@@ -4,7 +4,9 @@ uvicorn[standard]==0.24.0
 gunicorn>=21.2.0
 
 # Base de datos
-sqlalchemy>=2.0.30
+# <2.1: SQLAlchemy 2.1 cambió el driver default de PostgreSQL a psycopg3 (paquete "psycopg").
+# Nosotros usamos psycopg2-binary; acotamos el rango para que pip no resuelva a 2.1+.
+sqlalchemy>=2.0.30,<2.1
 psycopg2-binary==2.9.10
 alembic==1.13.1
 redis>=5.0.0
