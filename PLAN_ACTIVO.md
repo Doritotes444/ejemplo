@@ -1,4 +1,4 @@
-# PLAN ACTIVO — Gestión Neiva + Fábrica de Agentes IA
+﻿# PLAN ACTIVO — Gestión Neiva + Fábrica de Agentes IA
 
 **Fecha:** 2026-05-20  
 **Sprint activo:** Sprint 6 — Template medium  
@@ -28,6 +28,7 @@
 [✅] Sprint 8.3 — Gobernanza RBAC en Asistente IA, Reabastecimiento con Costo y Latencia Cero (COMPLETO)
 [✅] Sprint 8.4 — Entitlements (Trial 15 Días), Normalización Errores 422, UI Pro en Header (COMPLETO)
 [ ] Sprint 9 — Despliegue y Activación de Hermes-3 en Producción (SIGUIENTE)
+[ ] Sprint 10 — Landing Premium Dark-First (PROPUESTA — ver al final del documento)
 ```
 
 ---
@@ -542,4 +543,67 @@
 > [GEMINI PROPONE → ✅ CLAUDE IMPLEMENTA] Refrescar listado de productos post-checkout
 > **Solución:** Evento `window` desacoplado — `CartSidebar.jsx` dispara `new Event('venta-completada')` post-checkout. `Inventario.jsx` escucha el evento con `useEffect` y llama `cargar()`. Evita acoplar contextos y no requiere ProductosContext global.
 
+---
 
+## Sprint 10 — Landing Premium Dark-First (PROPUESTA — 2026-10-18)
+
+> [CLAUDE PROPONE] Sprint 10 — Reingeniería visual del landing público con dirección dark-first
+> **Motivo:** El landing actual (`frontend/src/pages/LandingPage.jsx`, 989 líneas) tiene copy excelente
+> pero lectura visual "AI-slop": paleta default de Tailwind (`emerald-600/slate-800/#fafaf9`),
+> monotonía de grids de cards idénticas, cero fotografía, cero movimiento y contenido placeholder
+> visible ("PENDIENTE", "Cuenta local y Twilio"). Análisis forense de la página ganadora del hackathon
+> (ORIVIA) + playbook replicable en `docs/PLAYBOOK_FRONTEND_PREMIUM.md`. Resuelve brecha B5 del Sprint 9.
+> **Decisión de dirección aprobada por el dueño:** paleta **dark-first elegante**
+> (bosque oscuro + crema + acento ámbar, elevada desde la sección "Economía Popular" actual).
+> **Autorización pendiente:** Gemini QA + dueño.
+> **Instrumento agregado 2026-10-18:** review/QA ejecutable con el framework **AGENTERS** del dueño
+> (`Desktop/AGENTERS`, swarm A00–A13 con Gemini): el router TCS despertaría solo A03
+> (Design Tokens + WCAG 2.1 AA) y A09 (QA Lead), sin gastar cuota en agentes innecesarios.
+
+### Tokens de marca dark-first (F0)
+
+``css
+@theme {                        /* frontend/src/index.css (Tailwind v4) */
+  --color-noche:       #101613; /* fondo base (verde-negro Huila)         */
+  --color-bosque:      #16281f; /* superficie de secciones                */
+  --color-card:        #1b2a22; /* cards sobre oscuro                     */
+  --color-crema:       #f5efe6; /* tinta principal sobre oscuro + acentos */
+  --color-tinta-suave: #a7b1aa; /* texto secundario                       */
+  --color-ambar:       #d89a3d; /* acento CTA                             */
+  --color-tierra:      #6b3f2a; /* acento secundario (café)               */
+  --color-cereza:      #a3262a; /* estados de alerta                      */
+  --color-linea:       rgba(245,239,230,.09);
+}
+/* Tipografía: Montserrat 300–700. El copy NO se toca: es el activo fuerte. */
+``
+
+### Micro-tareas (atómicas, con comando de verificación — regla §7 de AGENTS.md)
+
+| # | Tarea | Asignado | Archivo | Verificación |
+|---|-------|----------|---------|--------------|
+| H1 | Retirar jerga interna del header ("Cuenta local y Twilio" → tagline humana "La cuenta de tu negocio, al día") | Claude/Haiku | `LandingPage.jsx` | `grep -c "Twilio" frontend/src/pages/LandingPage.jsx` → 0 |
+| H2 | Resolver placeholders: ocultar sección Historias y redes vacías con flag `CONTENIDO_PENDIENTE=false` hasta tener casos reales | Claude/Haiku | `LandingPage.jsx` | `grep -cE "PENDIENTE" LandingPage.jsx` → 0 (co-beneficio B5) |
+| F0.1 | Instalar Montserrat + tokens `@theme` en `index.css`; mapear clases existentes emerald/slate → tokens | senior-dev | `frontend/src/index.css`, `LandingPage.jsx` | `cd frontend && npm run build` limpio |
+| F1.1 | `npm i motion` y componente `Reveal.jsx` (whileInView + `useReducedMotion`) wrappeando secciones | senior-dev | `frontend/src/components/landing/Reveal.jsx` | build + scroll manual en dev server |
+| F1.2 | Parallax simétrico ±40px en wrappers de sección (`useScroll`+`useTransform`) | haiku-worker | `frontend/src/hooks/useParallax.js` | build + scroll manual |
+| F1.3 | Capa ambiental `AmbientLayer.jsx` (motas deterministas + niebla 38s + gradient mesh) sobre fondo dark | haiku-worker | `frontend/src/components/landing/AmbientLayer.jsx` | build + FPS ≥ 55 en devtools móvil |
+| F1.4 | Header sticky que se solidifica pasadas 1.35vh con transición 500ms | haiku-worker | `LandingPage.jsx` | scroll manual |
+| F2.1 | Clip Veo (gemini/flow): "un día en la tienda: abrir persiano, primer cliente, registro de venta" → ffmpeg a 90–151 frames webp 1600px | Dueño (Claude genera el prompt) | `frontend/public/media/viaje/v%03d.webp` | total de frames < 6 MB |
+| F2.2 | Componente `FrameSequence.jsx` (scrub canvas 2D + spring + fallback poster), en la sección "¿Cómo funciona?" (h-[480–620svh] sticky, mapeo de los 4 pasos reales a rangos de progreso) | senior-dev | `frontend/src/components/landing/FrameSequence.jsx` | build + scroll con devtools throttling 3G |
+| F3.1 | Cirugía de layouts: romper patrón "eyebrow+h2+grid de cards" — Economía Popular full-bleed statement, Propuesta en bento asimétrico, Pasos dentro del scroll-telling, Historias fuera (H2) | senior-dev | `LandingPage.jsx` | checklist visual §2 del playbook |
+| F3.2 | Secciones claras alternadas (papel `#f5efe6`) para ritmo dark-first + hero con ken-burns sobre la primera foto real | Claude | `LandingPage.jsx` | contraste AA: ámbar sobre bosque ≥ 4.5:1 |
+| QA1 | [Gemini/AGENTERS] A03 (auditoría de Design Tokens + WCAG 2.1 AA sobre paleta dark-first) + A09 (QA Lead del landing rehecho) | AGENTERS (routing TCS) | QA report en repos | reporte sin issues rojas |
+
+### Presupuesto y restricciones
+
+- Sin TypeScript (regla activa). Assets de frames bajo `frontend/public/media/viaje/`.
+- F2.1 depende de Veo (dueño). H1, H2, F0 y F1 **no dependen de nada externo: ejecutables hoy**.
+- Presupuesto de bundle: JS bajo control (`motion` ≈ +18 kB gzip en el chunk del landing); lo pesado son assets de frames.
+- Fallback sin-JS: todo contenido servido visible por CSS (lección forense de ORIVIA).
+
+### Criterios de éxito Sprint 10
+
+1. `grep` sin "PENDIENTE" ni "Twilio" en `LandingPage.jsx` y `npm run build` limpio.
+2. Landing con ≥ 1 imagen real animada (ken-burns) y ≥ 1 sección scroll-telling funcional.
+3. Checklist anti-AI-slop §2 del playbook: tokens nombrados, ≥ 3 layouts distintos entre secciones, textura ambiental activa.
+4. Gemini QA sin issues de severidad roja.
