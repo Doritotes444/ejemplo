@@ -618,3 +618,11 @@
 - **Solución:** acotar `sqlalchemy>=2.0.30,<2.1` en `requirements.txt` (psycopg2 sigue siendo el default en 2.0.x).
 - **Verificación:** venv local con SQLAlchemy 2.0.52 queda incluido en el rango (sin reinstalación local); Dockerfile instala del mismo requirements; alembic y FastAPI comparten el mismo engine en `app/database.py`.
 - **Pendiente:** migración futura a SQLAlchemy 2.1 requeriría agregar `psycopg[binary]` y URL `postgresql+psycopg://`.
+
+### 2026-10-18 — Integración AGENTERS → protocolo AGENTS.md (§9)
+- **Análisis:** revisado `C:\Users\merid\Desktop\AGENTERS` (README, blueprint A00–A13, spec Joya Prime 2.0, motor core/).
+- **Decisión del dueño:** para este proyecto adoptamos lo mejor de ambos — conceptos AGENTERS + equipo/metas AGENTS.md. NO se usa su motor Python (Claude CLI ya ejecuta; router por keywords frágil).
+- **Lo que aporta AGENTERS y faltaba aquí:** TCS-lite (no montar pipeline para micro-tareas), ContextPackets para Haiku workers (300–600 tokens, sin "explora y deduce"), Zero-Unverified-Decision (3 puertas formales), **brecha de seguridad cubierta**: rol A04/A12 no existía en nuestro equipo — ahora el QA de Gemini incluye checklist STRIDE/OWASP para auth/pagos/endpoints públicos (AGENTS.md `#L217`).
+- **Lo que ya teníamos y AGENTERS confirma:** tiering de modelos estratégicos vs. baratos (§5 ≈ Opción 3 del blueprint, ahorro ~70%), métricas por tarea (`METRICAS.md`), verificación con comando exacto (§7.3).
+- **Fase 2 (YAGNI, se evalúa el próximo sprint):** grafo ligero `factory/PROJECT_GRAPH.json` con las 7 familias de nodo si la bitácora + procedencia EVIDENCED_BY no bastan contra el stale context.
+- **Registro:** protocolo completo en `AGENTS.md#L160-L239` (§9 — §9.6).

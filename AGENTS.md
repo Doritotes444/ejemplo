@@ -154,3 +154,86 @@ Para evitar el "token burn" y garantizar código robusto, ambos agentes deben ad
 - **Stack actual:** Claude (Opus/Sonnet/Haiku) + Gemini (free tier). Cero APIs pagas adicionales.
 
 Cuando Gestión Neiva genere su primera factura real, se activa Hermes-3 para el tier professional.
+
+---
+
+## 9. Integración AGENTERS (aprobada por dueño — 2026-10-18)
+
+> Origen: framework `Desktop\AGENTERS` del dueño — swarm de 14 agentes (A00–A13) guiado por grafos.
+> **Decisión de integración:** adoptamos los **conceptos** de AGENTERS (TCS, ContextPackets,
+> Zero-Unverified-Decision, telemetría, procedencia), NO su motor Python (Claude CLI ya ejecuta;
+> su router por keywords es frágil). Sus 14 roles se **mapean** sobre el equipo existente en §1:
+
+| Rol AGENTERS | Quién lo ejerce aquí | Cobertura |
+|---|---|---|
+| A00 Orquestador | Claude (descompone tareas, mantiene plan) | Ya se hace en PLAN_ACTIVO |
+| A05 Product Owner | Gemini (requirements → JSON) | Paso 1 del pipeline |
+| A06 Tech Lead / ADRs | Claude Sonnet | Pasos 2 y 5 |
+| A07/A08 Devs | Claude Sonnet + Haiku workers | Pasos 3–6 |
+| A09 QA Lead | Gemini | Paso 7 |
+| A10/A13 Datos/DBA | Claude Sonnet + Haiku workers | Pasos 2–3 |
+| **A04 Seguridad / A12 AppSec** | Gemini (QA ampliado, ver §9.4) | **Brecha nueva — se cubre con esta integración** |
+| A03 UX Tokens | Gemini / AGENTERS directo | Ya en uso (Sprint 10) |
+
+### 9.1 TCS-lite — clasificar ANTES de armar pipeline
+
+El pipeline de pasos 1–8 (§4) es para **sistemas nuevos**. No toda tarea lo amerita. Al recibir
+cualquier tarea, clasificarla primero:
+
+| Nivel | Criterio | Flujo mínimo |
+|---|---|---|
+| **MICRO** | 1 archivo aislado, UI pura, copy, typo | Implementación directa + verificación + commit. Bitácora breve, sin tocar plan de sprint |
+| **SMALL** | Bugfix cruzado front+back con test | [Claude] implementa + [Gemini] review puntual si hay riesgo |
+| **MEDIUM** | Feature nuevo (endpoint + pantalla + test) | Subconjunto del pipeline (2→6) con QA de Gemini enfocado |
+| **LARGE/CRITICAL** | Sistema nuevo, migración de esquema | Pipeline completo 1→8 + bitácora detallada + QA seguridad |
+
+El ahorro: no montar la máquina de fábrica para micro-tareas; nunca ahorrar QA en tareas LARGE.
+
+### 9.2 ContextPackets — regla para invocar trabajadores (Haiku/subagents)
+
+Prohibido invocar un trabajador con *"explora el repositorio y deduce"*. Toda invocación debe
+llevar un paquete compacto (~300–600 tokens) con campos fijos:
+
+```text
+CP-{N}: {objetivo en 1 línea}
+ARCHIVOS_OBJETIVO: rutas exactas (crear/editar)
+CONTRATOS_RELEVANTES: fragmento de api-contracts.md / schema.md que aplica
+RESTRICCIONES: stack vigente + convenciones del módulo (ej: no TypeScript, Tailwind tokens)
+VERIFICACION: comando exacto que Claude ejecutará al recibir el entregable
+```
+
+Para Gemini (ventana de 1M) NO aplica la poda agresiva: sí puede leer el codebase completo (esa es
+su fortaleza según §1). El ContextPacket es para trabajadores baratos y rápidos.
+
+### 9.3 Zero-Unverified-Decision (formaliza §7.3)
+
+Todo entregable pasa 3 puertas antes de marcarse ✅:
+1. **Puerta sintáctica:** linter/build compila (ej. `npm run build`, `python -c "import app.main"`).
+2. **Puerta determinista:** suite pytest o comando de verificación exacto (§7.3 ya lo exige — se mantiene).
+3. **Puerta de registro:** bitácora en PLAN_ACTIVO + commit. Sin registro, la tarea NO está cerrada.
+
+Si una puerta falla → reintento aislado de esa pieza (nunca aceptar "está casi bien").
+
+### 9.4 QA con checklist de seguridad (brecha A04/A12)
+
+Desde ahora, el QA de Gemini (paso 7) incluye, para features que tocan **auth, roles, pagos,
+datos de terceros o endpoints públicos**, un mini-checklist:
+
+- [ ] Validación estricta de entrada (Pydantic) en todos los endpoints nuevos
+- [ ] Autorización verificada: el recurso pertenece a la empresa del request (multi-tenant leak check)
+- [ ] Sin secretos en código ni logs; cabeceras defensivas intactas
+- [ ] OWASP rápido: inyección, XSS, SSRF, mass-assignment
+
+Salida: sección `## Seguridad` en `qa-report.md`. Issues rojas = bloqueantes antes del commit de despliegue.
+
+### 9.5 Procedencia EVIDENCED_BY en bitácora
+
+Cuando una tarea modifica lógica existente, la bitácora en PLAN_ACTIVO cita `archivo:línea` del
+código fuente real verificado (ej. `app/services/auth.py#L42-L67`). Evita stale context entre
+sesiones Claude/Gemini y entre AIs que no comparten memoria tiempo real.
+
+### 9.6 Grafo de proyecto ligero (FASE 2 — pendiente de validar con bitácora nueva)
+
+Si la bitácora + procedencia no bastan contra el staleness, migrar a `factory/PROJECT_GRAPH.json`
+(las 7 familias de nodo de AGENTERS: Producto/Arquitectura/Datos/UI/Seguridad/Infra/Evidencia).
+**No se implementa ahora** — YAGNI; se corre la fase 1 y se evalúa al cierre del próximo sprint.
