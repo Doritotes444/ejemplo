@@ -356,6 +356,40 @@
 
 ---
 
+## Sprint 9 — Brechas pendientes para Producción Comercial (PLAN — 2026-10-18)
+
+**Estado verificado 2026-10-18:** 86/86 tests backend ✅ · build frontend ✅ (15.4s) · sincronizado con origin/main (1 commit local sin push).
+
+### Brechas conocidas (funciones NO al 100%)
+
+| # | Brecha | Impacto | Severidad |
+|---|--------|---------|-----------|
+| B1 | **Cobro/billing no automatizado:** "Activar Pro" solo genera ticket de soporte (`/api/soporte/solicitar-upgrade`); la activación es manual y no hay pasarela de pago (Wompi/PayU/MercadoPago) ni registro `empresa.plan` automático ni renovación/vencimiento de suscripción pagada | No se puede facturar sin intervención humana → bloquea el ingreso que desbloquea Hermes-3 | 🔴 Barrera comercial |
+| B2 | **Ciclo de vida de suscripción pagada:** `entitlement_service` cubre trial de 15 días, pero falta estado `activa`/`suspendida`, cobro recurrente, y qué pasa exactamente al vencer el trial/Pro (Regla SUB-09 cubre POS básico, falta flujo de re-activación) | Churn silencioso y facturación incobrable | 🔴 Alta |
+| B3 | **Despliegue productivo no ejecutado:** `docker-compose.yml` básico, `render.yaml` y `Dockerfile` existen pero falta un compose de producción completo (Redis incluido, HTTPS/Nginx, migraciones alembic en arranque, backups) y subir a VPS | El sistema corre solo en dev | 🔴 Alta |
+| B4 | **Telemetría del agente ausente:** no se miden `time_to_sale`, `confirmation_rate`, `clarification_rate`, `LLM_fallback_rate` | Sin datos no se valida el piloto | 🟡 Media |
+| B5 | **Landing con placeholders:** `[HISTORIA REAL PENDIENTE]` (×2) y enlaces de redes vacíos | Portafolio público incompleto | 🟡 Media |
+| B6 | **Frontend sin code-splitting:** bundle único >500 kB (warning Vite); cargar `LandingPage`, `SuperAdmin`, `AgentWidget` con `lazy()` + `manualChunks` | Lento en 4G de móviles de barrio (usuario target) | 🟡 Media |
+| B7 | **Handoff desactualizado:** `docs/traspaso/HANDOFF.md` todavía lista el POS como "en diseño Sprint 4" | Confunde a nuevos agentes/desarrolladores | 🟢 Baja |
+
+### Plan de desarrollo propuesto (orden de ejecución)
+
+1. **Push del commit local** `5c876d0` a origin (1 commit pendiente) y commit de docs no trackeados (`docs/spec`, `docs/checklists`, `docs/traspaso`).
+2. **B7 → B5 (higiene documental, ~1 sesión):** reescribir `HANDOFF.md` al estado real; decidir historias reales o retirar la sección de la landing.
+3. **B6 (UX móvil, medio día):** code-splitting de rutas pesadas en `App.jsx` (`React.lazy`), `manualChunks` para recharts/@zxing; verificar build < 500 kB principal.
+4. **B1 + B2 (monetización, 1–2 sprints):** integrar pasarela colombiana (Wompi es candidata natural: bajo umbral, Neiva-friendly) para cobro mensual Pro; endpoint webhook de confirmación de pago idempotente; servicio `suscripcion_service` que activa `empresa.plan='pro'` y gestiona renovación/suspensión (fail-open en POS básico según SUB-09); tests de ciclo completo trial→pago→pro→vencimiento.
+5. **B3 (DevOps, en paralelo a 4):** compose de producción (Postgres 16 + Redis 7 + backend + frontend estático servido por Nginx + cloudflared/ngrok solo para piloto), `alembic upgrade head` en arranque, healthchecks y job de backup diario.
+6. **B4 (telemetría, al desplegar):** hooks de logging estructurado en `agent_orchestrator.py` y routers de voz; tabla `metricas_diarias` o entrada de log parseable para el piloto.
+7. **Sprint 8 piloto:** onboarding de 5–10 tiendas, medir adopción voz vs texto → **primer cobro real desbloquea Hermes-3 (i2)**.
+
+### Criterios de éxito Sprint 9
+1. Un comercio nuevo se registra, paga Pro por pasarela y queda activo **sin intervención humana** (trial→pago→pro E2E en producción).
+2. Stack productivo arriba en VPS con HTTPS, Redis y migrations en arranque; backup diario verificado.
+3. Bundle principal frontend < 500 kB y landing sin placeholders.
+4. Métricas del agente visibles por tienda para la reunión semanal del piloto.
+
+---
+
 ## Restricciones activas
 
 - **Hermes-3 / Together AI:** BLOQUEADO hasta primer ingreso de Gestión Neiva
