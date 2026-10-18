@@ -514,6 +514,26 @@
 
 ---
 
+## QA Modo Voz — Verificación del 2026-10-18 (Flujo completo real)
+
+**Entorno:** Postgres nativo + uvicorn (8000) + Vite (5173) + Chromium automatizado. Login con usuario demo.
+
+| Prueba | Resultado |
+|---|---|
+| Suite unitaria ciclo de voz `test_voice_turn_manager.js` | ✅ 43/43 (100%) |
+| Abrir modal "Modo Mostrador • Manos Libres" | ✅ Abre, orbe Hablando→Escuchando, sin crash |
+| Micrófono denegado (navegador automatizado sin permiso) | ✅ Mensaje único "Permiso de micrófono denegado" — **NO hay tormenta de errores** (8 entradas en consola en total, sin loop de reintentos) |
+| End-to-end texto: "vendí 2 arroz" | ✅ `READY_TO_CONFIRM` con fuzzy match → Arroz Diana 500g ($5.600) |
+| "confirmar" | ✅ `EXECUTED`, venta $5.600 registrada, stock 50→48 |
+| Confirmación repetida (mismo command_id) | ✅ `idempotente=True`, sin doble venta |
+| `POST /api/agente/transcribir-audio` (multipart `audio=@...wav`) | ✅ Endpoint vivo pero **ver hallazgo STT-01** |
+
+**Hallazgo STT-01 (🟡 Media — corregir en Sprint 9):** El fallback STT (Groq Whisper → Gemini) **alucina texto en audio sin voz**: un WAV de 1s con tono 440 Hz y cero voz produjo una frase completa en español elocuente. Riesgo: en móvil con ruido de calle, el pipeline BackendSTT puede generar comandos "fantasma" que llegan al parser. Mitigación propuesta (B-del-Sprint-9): filtro de energía RMS mínimo y duración mínima de voz real en `BackendSTTProvider` antes del upload (el VAD 950ms ya khanea el fin de habla; falta el umbral de "esto ES habla") + descartar transcificaciones < 50% de confianza. Riesgo de mutación: bajo (cualquier venta requiere confirmación explícita).
+
+**Falsos positivos descartados:** El polling cada ~20s de `GET /health` y los `GET /v1/models` (404) provienen de `opencode-cli.exe` (harness de agente, PID 2620), NO de la app. Los 3× `POST /token 401` fueron artefactos de submits inyectados durante la automatización con state de React no asentado — no reproducible por un usuario real.
+
+---
+
 ## Historial de propuestas implementadas
 
 > [GEMINI PROPONE → ✅ CLAUDE IMPLEMENTA] Validar límite de stock en CartContext.agregar()
