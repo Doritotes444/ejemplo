@@ -42,6 +42,7 @@ class UsuarioRespuesta(BaseModel):
     rol: RolUsuario
     created_at: datetime
     is_active: bool
+    es_superadmin: bool = False
 
 
 class UsuarioCrearConEmpresa(BaseModel):

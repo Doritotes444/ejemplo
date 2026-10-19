@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { ArrowLeft, KeyRound } from 'lucide-react'
+import { useTheme } from '../context/ThemeContext'
+import { ArrowLeft, KeyRound, Store, Sun, Moon, Monitor } from 'lucide-react'
 
 const BASE = import.meta.env.VITE_API_URL || '/api'
 
 export default function Login() {
   const { login } = useAuth()
+  const { tema, setTema } = useTheme()
   const navigate = useNavigate()
   const [form, setForm] = useState({ email: '', password: '' })
   const [error, setError] = useState(null)
@@ -25,18 +27,23 @@ export default function Login() {
     typeof window !== 'undefined' &&
     new URLSearchParams(window.location.search).get('expirado') === '1'
 
-  const cambiar = (e) => setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }))
+  const cambiar = (e) =>
+    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }))
 
   const enviar = async (e) => {
     e.preventDefault()
     setCargando(true)
     setError(null)
     try {
-      const data = await login(form.email, form.password)
-      const rutaDestino = data?.usuario?.rol === 'admin' ? '/dashboard' : '/ventas'
-      navigate(rutaDestino, { replace: true })
-    } catch (e) {
-      setError(e.message)
+      const data = await login(form.email.trim(), form.password)
+      // Enrutamiento canónico estricto según permisos validados en servidor
+      if (data?.usuario?.es_superadmin) {
+        navigate('/superadmin', { replace: true })
+      } else {
+        navigate('/ventas', { replace: true })
+      }
+    } catch (err) {
+      setError(err.message || 'Credenciales inválidas')
     } finally {
       setCargando(false)
     }
@@ -53,7 +60,8 @@ export default function Login() {
         body: JSON.stringify({ email: emailRecuperar.trim() }),
       })
       const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.detail || 'Error al solicitar recuperación')
+      if (!res.ok)
+        throw new Error(data.detail || 'Error al solicitar recuperación')
       if (data.token_desarrollo) {
         setTokenRecuperar(data.token_desarrollo)
       }
@@ -86,13 +94,13 @@ export default function Login() {
       if (!res.ok) throw new Error(data.detail || 'Código inválido o vencido')
       setMsgRecuperar({
         tipo: 'ok',
-        texto: '✅ Contraseña actualizada con éxito. Ya puedes iniciar sesión.',
+        texto: 'Contraseña actualizada con éxito. Ya puedes iniciar sesión.',
       })
       setTimeout(() => {
         setModalRecuperar(false)
         setPasoRecuperar(1)
         setMsgRecuperar(null)
-      }, 2000)
+      }, 1800)
     } catch (err) {
       setMsgRecuperar({ tipo: 'error', texto: err.message })
     } finally {
@@ -101,42 +109,87 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-[#fafaf9] flex flex-col justify-between p-4 font-sans">
-      <div className="w-full max-w-[360px] mx-auto pt-6">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col justify-between p-4 font-sans transition-colors">
+      {/* Barra superior con volver y toggle de tema */}
+      <div className="w-full max-w-sm mx-auto flex items-center justify-between pt-4">
         <Link
           to="/"
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-emerald-700 transition-colors mb-6"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
         >
           <ArrowLeft size={16} />
-          <span>Volver a la página principal</span>
+          <span>Inicio</span>
         </Link>
 
-        <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-8 space-y-6">
+        <div className="flex items-center gap-1 bg-slate-200/60 dark:bg-slate-800 p-0.5 rounded-lg text-xs">
+          <button
+            type="button"
+            onClick={() => setTema('light')}
+            className={`p-1.5 rounded-md ${
+              tema === 'light'
+                ? 'bg-white dark:bg-slate-700 text-slate-900 shadow-xs'
+                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+            }`}
+            title="Modo claro"
+          >
+            <Sun size={13} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setTema('dark')}
+            className={`p-1.5 rounded-md ${
+              tema === 'dark'
+                ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
+                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+            }`}
+            title="Modo oscuro"
+          >
+            <Moon size={13} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setTema('sistema')}
+            className={`p-1.5 rounded-md ${
+              tema === 'sistema'
+                ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
+                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+            }`}
+            title="Automático"
+          >
+            <Monitor size={13} />
+          </button>
+        </div>
+      </div>
+
+      {/* Tarjeta de Inicio de Sesión Canónica */}
+      <div className="w-full max-w-sm mx-auto my-auto py-6">
+        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 sm:p-8 space-y-6">
           <div className="text-center">
-            <div className="text-5xl mb-3">📦</div>
-            <h1 className="text-2xl font-black text-slate-900 tracking-tight mb-1">
-              Tiendapp · Gestión Neiva
+            <div className="w-12 h-12 mx-auto rounded-2xl bg-emerald-600 flex items-center justify-center text-white shadow-xs mb-3">
+              <Store size={26} strokeWidth={2.4} />
+            </div>
+            <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+              Tiendapp
             </h1>
-            <p className="text-xs text-slate-500 font-medium">
-              Ingreso a tu tienda y punto de venta
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              Ingresa con tu correo y contraseña
             </p>
           </div>
 
           <form onSubmit={enviar} className="space-y-4">
             {sesionExpirada && !error && (
-              <div className="bg-amber-50 text-amber-800 p-3 rounded-2xl text-xs text-center font-medium border border-amber-200 leading-relaxed">
-                ⚠️ Tu sesión terminó por seguridad o inactividad. Por favor inicia sesión nuevamente.
+              <div className="bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 p-3 rounded-xl text-xs text-center font-medium border border-amber-200 dark:border-amber-800">
+                Tu sesión expiró. Inicia sesión para continuar.
               </div>
             )}
 
             {error && (
-              <div className="bg-red-50 text-red-600 p-3 rounded-2xl text-xs text-center font-medium border border-red-100">
+              <div className="bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 p-3 rounded-xl text-xs text-center font-medium border border-rose-200 dark:border-rose-800">
                 {error}
               </div>
             )}
 
-            <div className="space-y-1">
-              <label className="block text-xs font-bold text-slate-700">
+            <div className="space-y-1.5">
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
                 Correo Electrónico
               </label>
               <input
@@ -146,14 +199,14 @@ export default function Login() {
                 onChange={cambiar}
                 required
                 autoComplete="email"
-                placeholder="nombre@tutienda.com"
-                className="w-full bg-[#fafaf9] border border-slate-200 rounded-xl px-3.5 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 transition"
+                placeholder="correo@tutienda.com"
+                className="w-full bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-3 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 transition"
               />
             </div>
 
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <label className="block text-xs font-bold text-slate-700">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
                   Contraseña
                 </label>
                 <button
@@ -162,7 +215,7 @@ export default function Login() {
                     setEmailRecuperar(form.email)
                     setModalRecuperar(true)
                   }}
-                  className="text-[11px] font-semibold text-emerald-700 hover:underline"
+                  className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:underline"
                 >
                   ¿Olvidaste tu clave?
                 </button>
@@ -175,7 +228,7 @@ export default function Login() {
                 required
                 autoComplete="current-password"
                 placeholder="••••••••"
-                className="w-full bg-[#fafaf9] border border-slate-200 rounded-xl px-3.5 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 transition"
+                className="w-full bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-3 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 transition"
               />
             </div>
 
@@ -183,37 +236,38 @@ export default function Login() {
               <button
                 type="submit"
                 disabled={cargando}
-                className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold text-sm py-3.5 rounded-xl transition-all shadow-sm active:scale-98 min-h-[48px]"
+                className="w-full min-h-[48px] bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 dark:disabled:bg-slate-800 disabled:cursor-not-allowed text-white font-bold text-sm py-3 rounded-xl transition shadow-xs active:scale-98"
               >
-                {cargando ? 'Ingresando...' : 'Entrar a mi Tienda'}
+                {cargando ? 'Ingresando...' : 'Iniciar Sesión'}
               </button>
             </div>
           </form>
 
-          <div className="pt-4 border-t border-slate-100 text-center text-xs text-slate-500 space-y-2">
-            <p>
-              ¿Aún no has registrado tu tienda?{' '}
-              <Link to="/registro" className="text-emerald-700 font-bold hover:underline">
-                Crear cuenta aquí
-              </Link>
-            </p>
+          <div className="pt-3 border-t border-slate-100 dark:border-slate-800 text-center text-xs text-slate-500 dark:text-slate-400">
+            ¿No tienes cuenta?{' '}
+            <Link
+              to="/registro"
+              className="text-emerald-600 dark:text-emerald-400 font-bold hover:underline"
+            >
+              Registra tu tienda
+            </Link>
           </div>
         </div>
       </div>
 
       {/* Modal de Recuperación de Contraseña */}
       {modalRecuperar && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-50 bg-slate-950/40 dark:bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 w-full max-w-sm p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-100">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-slate-900 font-bold text-sm">
+              <div className="flex items-center gap-2 text-slate-900 dark:text-slate-100 font-bold text-sm">
                 <KeyRound size={18} className="text-emerald-600" />
                 <span>Recuperar Contraseña</span>
               </div>
               <button
                 type="button"
                 onClick={() => setModalRecuperar(false)}
-                className="text-slate-400 hover:text-slate-700"
+                className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
               >
                 ✕
               </button>
@@ -223,8 +277,8 @@ export default function Login() {
               <div
                 className={`p-3 rounded-xl text-xs font-medium ${
                   msgRecuperar.tipo === 'ok'
-                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                    : 'bg-red-50 text-red-700 border border-red-200'
+                    ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                    : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800'
                 }`}
               >
                 {msgRecuperar.texto}
@@ -233,41 +287,41 @@ export default function Login() {
 
             {pasoRecuperar === 1 ? (
               <form onSubmit={solicitarToken} className="space-y-3">
-                <p className="text-xs text-slate-500">
-                  Ingresa el correo registrado de tu tienda para generar tu código de restablecimiento.
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Ingresa tu correo para generar tu código de restablecimiento.
                 </p>
                 <input
                   type="email"
                   required
-                  placeholder="nombre@tutienda.com"
+                  placeholder="correo@tutienda.com"
                   value={emailRecuperar}
                   onChange={(e) => setEmailRecuperar(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm"
+                  className="w-full bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 dark:text-slate-100"
                 />
                 <button
                   type="submit"
                   disabled={enviandoRecuperar}
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl text-xs"
+                  className="w-full min-h-[44px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl text-xs transition"
                 >
-                  {enviandoRecuperar ? 'Solicitando...' : 'Generar código de recuperación'}
+                  {enviandoRecuperar ? 'Generando...' : 'Generar Código'}
                 </button>
               </form>
             ) : (
               <form onSubmit={confirmarNuevaPassword} className="space-y-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">
-                    Código de recuperación
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                    Código de verificación
                   </label>
                   <input
                     type="text"
                     required
                     value={tokenRecuperar}
                     onChange={(e) => setTokenRecuperar(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono"
+                    className="w-full bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 dark:text-slate-100"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
                     Nueva contraseña (mín. 8 caracteres)
                   </label>
                   <input
@@ -276,13 +330,13 @@ export default function Login() {
                     minLength={8}
                     value={nuevaPassword}
                     onChange={(e) => setNuevaPassword(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm"
+                    className="w-full bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-slate-100"
                   />
                 </div>
                 <button
                   type="submit"
                   disabled={enviandoRecuperar}
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl text-xs"
+                  className="w-full min-h-[44px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl text-xs transition"
                 >
                   {enviandoRecuperar ? 'Guardando...' : 'Actualizar Contraseña'}
                 </button>
@@ -292,8 +346,9 @@ export default function Login() {
         </div>
       )}
 
-      <div className="text-center text-xs text-slate-400 py-6">
-        Tiendapp · Gestión Neiva · Punto de venta y administración para el comercio local
+      {/* Pie de página */}
+      <div className="text-center text-xs text-slate-400 dark:text-slate-600 py-3">
+        Tiendapp · Plataforma de gestión y ventas para el comercio local
       </div>
     </div>
   )

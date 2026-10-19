@@ -226,20 +226,20 @@ export default function Inventario() {
   return (
     <div className="space-y-4">
       {/* Cabecera */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900">
-              {tienda || 'Catálogo e Inventario Inteligente'}
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100">
+              {tienda || 'Catálogo e Inventario'}
             </h1>
             {modoOffline && (
-              <span className="px-2.5 py-0.5 rounded-lg bg-amber-100 text-amber-800 text-xs font-bold">
-                Catálogo Offline Activo
+              <span className="px-2.5 py-0.5 rounded-lg bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 text-xs font-semibold">
+                Catálogo offline
               </span>
             )}
           </div>
-          <p className="text-slate-600 text-xs sm:text-sm mt-0.5">
-            {productos.length} productos con fotografía · Escáner de inventario y alertas de reposición
+          <p className="text-slate-500 dark:text-slate-400 text-xs sm:text-sm mt-0.5">
+            {productos.length} productos registrados · Escáner de código de barras y control de existencias
           </p>
         </div>
 
@@ -247,20 +247,20 @@ export default function Inventario() {
           <button
             type="button"
             onClick={() => setEscanerInventarioAbierto((prev) => !prev)}
-            className="min-h-[44px] px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs sm:text-sm font-bold flex items-center gap-2 transition-colors"
+            className="min-h-[44px] px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs sm:text-sm font-semibold flex items-center gap-2 transition-colors border border-slate-200 dark:border-slate-700"
           >
-            <ScanBarcode size={17} />
-            <span>Escáner de Inventario</span>
+            <ScanBarcode size={16} />
+            <span>Escáner de inventario</span>
           </button>
 
           {esAdmin && (
             <button
               type="button"
               onClick={() => abrirNuevo('')}
-              className="min-h-[44px] px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-bold flex items-center gap-1.5 transition-colors"
+              className="min-h-[44px] px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white text-white text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition-colors"
             >
-              <Plus size={17} />
-              <span>Nuevo Producto</span>
+              <Plus size={16} />
+              <span>Nuevo producto</span>
             </button>
           )}
         </div>
@@ -268,20 +268,20 @@ export default function Inventario() {
 
       {/* Escáner de Inventario desplegable */}
       {escanerInventarioAbierto && (
-        <div className="bg-white rounded-2xl border border-blue-200 p-4 space-y-3">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 space-y-3">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-sm font-bold text-slate-900">
-                Escáner de Inventario (Cámara o Lector USB)
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                Escáner de inventario (cámara o lector USB)
               </h2>
-              <p className="text-xs text-slate-600">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 Si el código existe podrás sumar existencias; si no existe, se abrirá el registro con el código completado.
               </p>
             </div>
             <button
               type="button"
               onClick={() => setEscanerInventarioAbierto(false)}
-              className="min-w-[38px] min-h-[38px] flex items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100"
+              className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
             >
               <X size={18} />
             </button>
@@ -297,15 +297,15 @@ export default function Inventario() {
         <div
           className={`p-3.5 rounded-2xl border flex items-center justify-between gap-3 text-xs sm:text-sm font-medium ${
             mensajeEscaner.tipo === 'encontrado'
-              ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
-              : 'bg-blue-50 border-blue-200 text-blue-900'
+              ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900/50 text-emerald-900 dark:text-emerald-200'
+              : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100'
           }`}
         >
           <span>{mensajeEscaner.texto}</span>
           <button
             type="button"
             onClick={() => setMensajeEscaner(null)}
-            className="text-slate-500 hover:text-slate-800 font-bold px-2"
+            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-bold px-2"
           >
             ✕
           </button>
@@ -317,10 +317,10 @@ export default function Inventario() {
         <button
           type="button"
           onClick={() => setTabActiva('catalogo')}
-          className={`min-h-[44px] px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 shrink-0 transition-colors ${
+          className={`min-h-[42px] px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-2 shrink-0 transition-colors ${
             tabActiva === 'catalogo'
-              ? 'bg-blue-600 text-white'
-              : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+              ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
+              : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
           }`}
         >
           <Package size={16} />
@@ -330,16 +330,16 @@ export default function Inventario() {
         <button
           type="button"
           onClick={() => setTabActiva('alertas')}
-          className={`min-h-[44px] px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 shrink-0 transition-colors ${
+          className={`min-h-[42px] px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-2 shrink-0 transition-colors ${
             tabActiva === 'alertas'
-              ? 'bg-blue-600 text-white'
-              : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+              ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
+              : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
           }`}
         >
           <BellRing size={16} />
-          <span>Alertas y Reposición</span>
+          <span>Alertas y reposición</span>
           {totalAlertas > 0 && (
-            <span className="px-2 py-0.5 rounded-full bg-red-600 text-white text-[11px] font-extrabold">
+            <span className="px-2 py-0.5 rounded-full bg-rose-600 text-white text-[11px] font-bold">
               {totalAlertas}
             </span>
           )}
@@ -348,19 +348,19 @@ export default function Inventario() {
         <button
           type="button"
           onClick={() => setTabActiva('movimientos')}
-          className={`min-h-[44px] px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 shrink-0 transition-colors ${
+          className={`min-h-[42px] px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-2 shrink-0 transition-colors ${
             tabActiva === 'movimientos'
-              ? 'bg-blue-600 text-white'
-              : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+              ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
+              : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
           }`}
         >
           <History size={16} />
-          <span>Kardex / Movimientos ({movimientos.length})</span>
+          <span>Movimientos / Kardex ({movimientos.length})</span>
         </button>
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl text-sm">
+        <div className="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 text-rose-700 dark:text-rose-300 p-4 rounded-xl text-sm">
           {error}
         </div>
       )}
@@ -368,10 +368,10 @@ export default function Inventario() {
       {/* TAB 1: CATÁLOGO DE PRODUCTOS CON FOTOS */}
       {tabActiva === 'catalogo' && (
         <div className="space-y-4">
-          <div className="bg-white rounded-2xl border border-slate-200 p-3.5 flex flex-col sm:flex-row gap-3">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-3.5 flex flex-col sm:flex-row gap-3">
             <div className="relative flex-1">
               <Search
-                size={17}
+                size={16}
                 className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
               />
               <input
@@ -379,7 +379,7 @@ export default function Inventario() {
                 placeholder="Buscar por nombre, código de barras o proveedor..."
                 value={busqueda}
                 onChange={(e) => setBusqueda(e.target.value)}
-                className="w-full min-h-[44px] pl-10 pr-4 py-2 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+                className="w-full min-h-[44px] pl-10 pr-4 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl text-sm focus:outline-none"
               />
             </div>
 
@@ -389,10 +389,10 @@ export default function Inventario() {
                   key={cat}
                   type="button"
                   onClick={() => setFiltroCategoria(cat)}
-                  className={`min-h-[40px] px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-colors ${
+                  className={`min-h-[40px] px-3 py-1.5 rounded-xl text-xs font-semibold shrink-0 transition-colors ${
                     filtroCategoria === cat
-                      ? 'bg-slate-900 text-white'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                      ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
                   }`}
                 >
                   {cat}
@@ -403,12 +403,12 @@ export default function Inventario() {
 
           {cargando && productos.length === 0 ? (
             <div className="flex items-center justify-center h-56">
-              <div className="animate-spin rounded-full h-9 w-9 border-b-2 border-blue-600" />
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-900 dark:border-slate-100" />
             </div>
           ) : filtrados.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-slate-200 text-center py-14 px-4">
-              <Package size={40} className="mx-auto text-slate-400 mb-2" />
-              <p className="text-base font-bold text-slate-800">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-center py-14 px-4">
+              <Package size={40} className="mx-auto text-slate-400 dark:text-slate-500 mb-2 opacity-50" />
+              <p className="text-base font-semibold text-slate-800 dark:text-slate-200">
                 {busqueda
                   ? 'No encontramos productos para esa búsqueda'
                   : 'Aún no hay productos registrados en tu tienda'}
@@ -417,7 +417,7 @@ export default function Inventario() {
                 <button
                   type="button"
                   onClick={() => abrirNuevo(busqueda.trim())}
-                  className="mt-3 min-h-[44px] px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-bold"
+                  className="mt-3 min-h-[44px] px-4 py-2 rounded-xl bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 text-xs font-semibold"
                 >
                   Registrar producto con código &quot;{busqueda.trim()}&quot;
                 </button>
@@ -439,60 +439,60 @@ export default function Inventario() {
         </div>
       )}
 
-      {/* TAB 2: ALERTAS INTELIGENTES Y RECOMENDACIÓN DE COMPRA (Sección 9) */}
+      {/* TAB 2: ALERTAS INTELIGENTES Y RECOMENDACIÓN DE COMPRA */}
       {tabActiva === 'alertas' && (
         <div className="space-y-4">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <div className="bg-white p-4 rounded-2xl border border-slate-200">
-              <p className="text-xs font-bold text-slate-500 uppercase">
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
+              <p className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
                 Agotados
               </p>
-              <p className="text-2xl font-extrabold text-red-600 mt-1">
+              <p className="text-2xl font-bold text-rose-600 dark:text-rose-400 mt-1">
                 {alertasData?.resumen?.total_agotados || 0}
               </p>
             </div>
-            <div className="bg-white p-4 rounded-2xl border border-slate-200">
-              <p className="text-xs font-bold text-slate-500 uppercase">
-                Stock Bajo
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
+              <p className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                Stock bajo
               </p>
-              <p className="text-2xl font-extrabold text-amber-600 mt-1">
+              <p className="text-2xl font-bold text-amber-500 dark:text-amber-400 mt-1">
                 {alertasData?.resumen?.total_stock_bajo || 0}
               </p>
             </div>
-            <div className="bg-white p-4 rounded-2xl border border-slate-200">
-              <p className="text-xs font-bold text-slate-500 uppercase">
-                Pedido Sugerido ($)
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
+              <p className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                Pedido sugerido ($)
               </p>
-              <p className="text-xl font-extrabold text-blue-700 mt-1">
+              <p className="text-xl font-bold text-slate-900 dark:text-slate-100 mt-1">
                 $
                 {Number(
                   alertasData?.resumen?.costo_total_reposicion_sugerida || 0
                 ).toLocaleString('es-CO')}
               </p>
             </div>
-            <div className="bg-white p-4 rounded-2xl border border-slate-200">
-              <p className="text-xs font-bold text-slate-500 uppercase">
-                Baja Rotación (30d)
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
+              <p className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                Baja rotación (30d)
               </p>
-              <p className="text-2xl font-extrabold text-slate-800 mt-1">
+              <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-1">
                 {alertasData?.resumen?.total_baja_rotacion || 0}
               </p>
             </div>
           </div>
 
           {/* Recomendación inteligente de reposición */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 space-y-3">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 sm:p-5 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Truck size={18} className="text-blue-600" />
-                <h2 className="text-base font-bold text-slate-900">
-                  Recomendaciones de Compra y Reposición
+                <Truck size={17} className="text-slate-600 dark:text-slate-300" />
+                <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                  Recomendaciones de compra y reposición
                 </h2>
               </div>
               <button
                 type="button"
                 onClick={cargarAlertasYMovimientos}
-                className="min-h-[38px] px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-bold text-slate-700 flex items-center gap-1"
+                className="min-h-[38px] px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1 transition-colors"
               >
                 <RefreshCw size={13} className={cargandoExtra ? 'animate-spin' : ''} />
                 <span>Actualizar</span>
@@ -500,7 +500,7 @@ export default function Inventario() {
             </div>
 
             {(alertasData?.reposicion_recomendada || []).length === 0 ? (
-              <p className="text-sm text-slate-500 py-6 text-center">
+              <p className="text-sm text-slate-500 dark:text-slate-400 py-6 text-center">
                 Tu inventario tiene cobertura suficiente según el ritmo actual de ventas.
               </p>
             ) : (
@@ -508,36 +508,36 @@ export default function Inventario() {
                 {alertasData.reposicion_recomendada.map((item) => (
                   <div
                     key={item.id}
-                    className="p-3.5 rounded-xl border border-slate-200 flex items-center gap-3 bg-slate-50"
+                    className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center gap-3 bg-slate-50/60 dark:bg-slate-800/40"
                   >
                     <img
                       src={resolverUrlFotoProducto(item.foto_url, item.nombre)}
                       alt={item.nombre}
-                      className="w-14 h-14 rounded-xl object-cover shrink-0 bg-white border border-slate-200"
+                      className="w-14 h-14 rounded-xl object-cover shrink-0 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
                     />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${
+                          className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
                             item.urgencia === 'CRITICA'
-                              ? 'bg-red-100 text-red-800'
+                              ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300'
                               : item.urgencia === 'ALTA'
-                              ? 'bg-amber-100 text-amber-800'
-                              : 'bg-blue-100 text-blue-800'
+                              ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300'
+                              : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
                           }`}
                         >
                           {item.urgencia}
                         </span>
-                        <span className="text-xs text-slate-500 truncate">
+                        <span className="text-xs text-slate-400 dark:text-slate-500 truncate">
                           {item.proveedor}
                         </span>
                       </div>
-                      <p className="font-bold text-sm text-slate-900 truncate mt-0.5">
+                      <p className="font-semibold text-sm text-slate-900 dark:text-slate-100 truncate mt-0.5">
                         {item.nombre}
                       </p>
-                      <p className="text-xs text-slate-600">
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
                         Actual: <b>{item.cantidad_actual}</b> (Mín: {item.stock_minimo}) ·
-                        Pedir sugerido: <b>{item.cantidad_sugerida_pedido}</b> ($
+                        Sugerido: <b>{item.cantidad_sugerida_pedido}</b> ($
                         {Number(item.costo_estimado_pedido).toLocaleString('es-CO')})
                       </p>
                     </div>
@@ -550,7 +550,7 @@ export default function Inventario() {
                           )
                           if (prod) abrirModalMovimiento(prod)
                         }}
-                        className="min-h-[40px] px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shrink-0"
+                        className="min-h-[40px] px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white text-white text-xs font-semibold shrink-0 transition-colors"
                       >
                         Abastecer
                       </button>
@@ -563,29 +563,29 @@ export default function Inventario() {
 
           {/* Productos de baja rotación */}
           {(alertasData?.baja_rotacion || []).length > 0 && (
-            <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 space-y-3">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 sm:p-5 space-y-3">
               <div className="flex items-center gap-2">
-                <TrendingDown size={18} className="text-amber-600" />
-                <h2 className="text-base font-bold text-slate-900">
-                  Productos de Baja Rotación (Sin ventas recientes)
+                <TrendingDown size={17} className="text-slate-600 dark:text-slate-300" />
+                <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                  Productos de baja rotación
                 </h2>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {alertasData.baja_rotacion.map((item) => (
                   <div
                     key={item.id}
-                    className="p-3 rounded-xl border border-slate-200 flex items-center justify-between gap-3"
+                    className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3 bg-slate-50/50 dark:bg-slate-800/30"
                   >
                     <div>
-                      <p className="font-bold text-sm text-slate-900">
+                      <p className="font-semibold text-sm text-slate-900 dark:text-slate-100">
                         {item.nombre}
                       </p>
-                      <p className="text-xs text-slate-500">
-                        Stock: {item.cantidad_actual} · Capital inmovilizado: $
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Stock: {item.cantidad_actual} · Inmovilizado: $
                         {Number(item.capital_inmovilizado).toLocaleString('es-CO')}
                       </p>
                     </div>
-                    <span className="text-xs font-semibold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-lg">
+                    <span className="text-[11px] font-medium text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg">
                       Sugerir promo
                     </span>
                   </div>
@@ -596,24 +596,24 @@ export default function Inventario() {
         </div>
       )}
 
-      {/* TAB 3: HISTORIAL AUDITABLE DE MOVIMIENTOS DE INVENTARIO (Sección 8) */}
+      {/* TAB 3: HISTORIAL AUDITABLE DE MOVIMIENTOS DE INVENTARIO */}
       {tabActiva === 'movimientos' && (
-        <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 space-y-3">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 sm:p-5 space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-base font-bold text-slate-900">
-              Historial Auditable de Movimientos (Entradas, Salidas, Ajustes y Ventas)
+            <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+              Historial de movimientos (kardex)
             </h2>
             <button
               type="button"
               onClick={cargarAlertasYMovimientos}
-              className="min-h-[38px] px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-bold text-slate-700"
+              className="min-h-[38px] px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 transition-colors"
             >
               Actualizar
             </button>
           </div>
 
           {movimientos.length === 0 ? (
-            <p className="text-sm text-slate-500 py-8 text-center">
+            <p className="text-sm text-slate-400 dark:text-slate-500 py-8 text-center">
               Aún no hay movimientos de inventario registrados.
             </p>
           ) : (
@@ -621,41 +621,41 @@ export default function Inventario() {
               {movimientos.map((m) => (
                 <div
                   key={m.id}
-                  className="p-3.5 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+                  className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2"
                 >
                   <div className="space-y-0.5">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${
+                        className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase ${
                           m.tipo === 'entrada' ||
                           m.tipo === 'inicial' ||
                           m.tipo === 'anulacion_venta'
-                            ? 'bg-emerald-100 text-emerald-800'
+                            ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300'
                             : m.tipo === 'salida' || m.tipo === 'venta'
-                            ? 'bg-amber-100 text-amber-800'
-                            : 'bg-blue-100 text-blue-800'
+                            ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300'
+                            : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
                         }`}
                       >
                         {m.tipo.replace('_', ' ')}
                       </span>
-                      <span className="font-bold text-sm text-slate-900">
+                      <span className="font-semibold text-sm text-slate-900 dark:text-slate-100">
                         {m.producto_nombre}
                       </span>
-                      <span className="text-xs text-slate-400 font-mono">
+                      <span className="text-xs text-slate-400 dark:text-slate-500 font-mono">
                         #{m.codigo_barras}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-600">
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
                       {m.motivo || 'Sin observación'} · Por:{' '}
                       <b>{m.usuario_nombre_snapshot || 'Sistema'}</b>
                     </p>
                   </div>
 
-                  <div className="flex sm:flex-col items-center sm:items-end justify-between border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-100">
-                    <span className="text-xs font-bold text-slate-900">
+                  <div className="flex sm:flex-col items-center sm:items-end justify-between border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-100 dark:border-slate-800">
+                    <span className="text-xs font-semibold text-slate-900 dark:text-slate-100">
                       Stock: {m.stock_anterior} → {m.stock_nuevo} (Δ {m.cantidad})
                     </span>
-                    <span className="text-[11px] text-slate-400">
+                    <span className="text-[11px] text-slate-400 dark:text-slate-500">
                       {m.created_at
                         ? new Date(m.created_at).toLocaleString('es-CO')
                         : ''}
@@ -683,16 +683,16 @@ export default function Inventario() {
         />
       )}
 
-      {/* Modal de Movimiento de Inventario (Entrada / Salida / Ajuste con motivo) */}
+      {/* Modal de Movimiento de Inventario */}
       {productoMovimiento && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl w-full max-w-md overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-slate-50">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-none flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xl w-full max-w-md overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/60">
               <div>
-                <h2 className="font-bold text-base text-slate-900">
-                  Movimiento de Inventario
+                <h2 className="font-semibold text-base text-slate-900 dark:text-slate-100">
+                  Movimiento de inventario
                 </h2>
-                <p className="text-xs text-slate-600">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
                   {productoMovimiento.nombre} (Stock actual:{' '}
                   {productoMovimiento.cantidad_actual}{' '}
                   {productoMovimiento.unidad_medida})
@@ -701,7 +701,7 @@ export default function Inventario() {
               <button
                 type="button"
                 onClick={() => setProductoMovimiento(null)}
-                className="min-w-[38px] min-h-[38px] flex items-center justify-center rounded-xl text-slate-500 hover:bg-slate-200"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
               >
                 <X size={18} />
               </button>
@@ -709,7 +709,7 @@ export default function Inventario() {
 
             <form onSubmit={enviarMovimiento} className="p-5 space-y-4">
               {errorMov && (
-                <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-semibold">
+                <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 text-rose-700 dark:text-rose-300 text-xs font-medium">
                   {errorMov}
                 </div>
               )}
@@ -742,10 +742,10 @@ export default function Inventario() {
                         motivo: op.defaultMotivo,
                       }))
                     }
-                    className={`min-h-[44px] rounded-xl text-xs font-bold border transition-colors ${
+                    className={`min-h-[42px] rounded-xl text-xs font-semibold border transition-colors ${
                       formMov.tipo === op.id
-                        ? 'bg-blue-600 border-blue-600 text-white'
-                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                        ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 border-transparent'
+                        : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-750'
                     }`}
                   >
                     {op.label}
@@ -754,7 +754,7 @@ export default function Inventario() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   {formMov.tipo === 'ajuste'
                     ? 'Nuevo conteo físico total en tienda *'
                     : 'Cantidad a mover *'}
@@ -769,13 +769,13 @@ export default function Inventario() {
                     setFormMov((prev) => ({ ...prev, cantidad: e.target.value }))
                   }
                   placeholder="Ej: 12"
-                  className="w-full min-h-[44px] border border-slate-300 rounded-xl px-3.5 py-2 text-sm"
+                  className="w-full min-h-[44px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl px-3.5 py-2 text-sm focus:outline-none"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Motivo / Observación Auditable *
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Motivo u observación *
                 </label>
                 <input
                   type="text"
@@ -785,14 +785,14 @@ export default function Inventario() {
                     setFormMov((prev) => ({ ...prev, motivo: e.target.value }))
                   }
                   placeholder="Ej: Factura proveedor #402"
-                  className="w-full min-h-[44px] border border-slate-300 rounded-xl px-3.5 py-2 text-sm"
+                  className="w-full min-h-[44px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl px-3.5 py-2 text-sm focus:outline-none"
                 />
               </div>
 
               {formMov.tipo === 'entrada' && (
                 <div className="grid grid-cols-2 gap-3 pt-1">
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                       Costo compra ($)
                     </label>
                     <input
@@ -806,11 +806,11 @@ export default function Inventario() {
                           nuevo_precio_costo: e.target.value,
                         }))
                       }
-                      className="w-full min-h-[42px] border border-slate-300 rounded-xl px-3 py-1.5 text-sm"
+                      className="w-full min-h-[42px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl px-3 py-1.5 text-sm focus:outline-none"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                       Precio venta ($)
                     </label>
                     <input
@@ -824,7 +824,7 @@ export default function Inventario() {
                           nuevo_precio_venta: e.target.value,
                         }))
                       }
-                      className="w-full min-h-[42px] border border-slate-300 rounded-xl px-3 py-1.5 text-sm"
+                      className="w-full min-h-[42px] border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl px-3 py-1.5 text-sm focus:outline-none"
                     />
                   </div>
                 </div>
@@ -834,16 +834,16 @@ export default function Inventario() {
                 <button
                   type="button"
                   onClick={() => setProductoMovimiento(null)}
-                  className="flex-1 min-h-[44px] border border-slate-300 rounded-xl text-sm font-bold text-slate-700"
+                  className="flex-1 min-h-[44px] border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={guardandoMov}
-                  className="flex-1 min-h-[44px] bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold"
+                  className="flex-1 min-h-[44px] bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white text-white rounded-xl text-sm font-semibold transition-colors disabled:opacity-50"
                 >
-                  {guardandoMov ? 'Guardando...' : 'Confirmar Movimiento'}
+                  {guardandoMov ? 'Guardando...' : 'Confirmar movimiento'}
                 </button>
               </div>
             </form>

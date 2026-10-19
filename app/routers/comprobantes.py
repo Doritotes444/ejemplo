@@ -39,11 +39,9 @@ class CrearComprobanteRequest(BaseModel):
     notas: Optional[str] = None
     client_operation_id: Optional[str] = None
 
-    def obtener_imagen(self) -> str:
+    def obtener_imagen(self) -> Optional[str]:
         img = (self.imagen_data or self.foto_comprobante_url or "").strip()
-        if not img:
-            raise ValueError("La fotografía del comprobante es obligatoria como respaldo")
-        return img
+        return img or None
 
     @field_validator("monto")
     @classmethod

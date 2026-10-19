@@ -31,7 +31,7 @@ Write-Host "-> Inicializando base de datos y tienda de demostracion..." -Foregro
 .\.venv\Scripts\python.exe seed_demo.py
 
 Write-Host "-> Levantando Backend FastAPI en http://localhost:8000 ..." -ForegroundColor Green
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$RootDir'; .\.venv\Scripts\uvicorn.exe app.main:app --reload --host 0.0.0.0 --port 8000"
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$RootDir'; .\.venv\Scripts\uvicorn.exe app.main:app --reload --host 127.0.0.1 --port 8000"
 
 Write-Host "-> Levantando Frontend React PWA en http://localhost:5173 ..." -ForegroundColor Green
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$RootDir\frontend'; npm run dev -- --host 0.0.0.0 --port 5173"

@@ -1,21 +1,47 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import {
+  X,
+  Trash2,
+  Plus,
+  Minus,
+  CheckCircle2,
+  AlertCircle,
+  Banknote,
+  Smartphone,
+  CreditCard,
+  Building2,
+  BookOpen,
+  Zap,
+} from 'lucide-react'
 import { useCart } from '../context/CartContext'
 import { useVentas } from '../hooks/useVentas'
+import { resolverUrlFotoProducto } from '../hooks/useProductos'
 
 const ES_GRANEL = (unidad) => unidad && unidad !== 'unidad'
 
 const METODOS_PAGO = [
-  { id: 'Efectivo', label: '💵 Efectivo' },
-  { id: 'Nequi', label: '🟣 Nequi' },
-  { id: 'DaviPlata', label: '🔴 DaviPlata' },
-  { id: 'Transferencia', label: '🏦 Transf.' },
-  { id: 'Tarjeta', label: '💳 Tarjeta' },
-  { id: 'Fiado', label: '📒 Fiado' },
+  { id: 'Efectivo', label: 'Efectivo', icon: Banknote },
+  { id: 'Nequi', label: 'Nequi', icon: Smartphone },
+  { id: 'DaviPlata', label: 'DaviPlata', icon: Smartphone },
+  { id: 'Transferencia', label: 'Transf.', icon: Building2 },
+  { id: 'Tarjeta', label: 'Tarjeta', icon: CreditCard },
+  { id: 'Fiado', label: 'Fiado', icon: BookOpen },
 ]
 
+const BILLETES_RAPIDOS = [2000, 5000, 10000, 20000, 50000, 100000]
+
 export default function CartSidebar() {
-  const { carrito, carritoAbierto, setCarritoAbierto, agregar, restar, setCantidad, eliminar, vaciar, total } =
-    useCart()
+  const {
+    carrito,
+    carritoAbierto,
+    setCarritoAbierto,
+    agregar,
+    restar,
+    setCantidad,
+    eliminar,
+    vaciar,
+    total,
+  } = useCart()
   const { registrar } = useVentas()
   const [procesando, setProcesando] = useState(false)
   const [mensaje, setMensaje] = useState(null)
@@ -28,8 +54,24 @@ export default function CartSidebar() {
       ? Math.max(0, Number(montoRecibido) - total)
       : 0
 
+  // Atajos de teclado cuando el carrito está abierto
+  useEffect(() => {
+    if (!carritoAbierto) return
+    const handleKey = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        setCarritoAbierto(false)
+      } else if (e.key === 'F2' && carrito.length > 0 && !procesando) {
+        e.preventDefault()
+        checkout()
+      }
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [carritoAbierto, carrito.length, procesando, total, metodoPago, montoRecibido, clienteNombre])
+
   const checkout = async () => {
-    if (!carrito.length) return
+    if (!carrito.length || procesando) return
     setProcesando(true)
     setMensaje(null)
     const t0 = performance.now()
@@ -45,8 +87,8 @@ export default function CartSidebar() {
       const ms = Math.round(performance.now() - t0)
       setMensaje({
         tipo: 'ok',
-        texto: `${resultado.offline ? '📴 Guardada Offline' : '✅ Venta registrada'} (${ms}ms) — Total: $${Number(resultado.total || total).toLocaleString('es-CO')}${
-          cambio > 0 ? ` · Cambio: $${cambio.toLocaleString('es-CO')}` : ''
+        texto: `${resultado.offline ? 'Venta offline guardada' : 'Venta registrada'} (${ms}ms) — Total: $${Number(resultado.total || total).toLocaleString('es-CO')}${
+          cambio > 0 ? ` · Vueltas: $${cambio.toLocaleString('es-CO')}` : ''
         }`,
       })
       vaciar()
@@ -65,61 +107,81 @@ export default function CartSidebar() {
     <>
       {carritoAbierto && (
         <div
-          className="fixed inset-0 bg-black/30 z-30"
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-none z-40 transition-opacity"
           onClick={() => setCarritoAbierto(false)}
         />
       )}
 
-      <div
-        className={`fixed top-0 right-0 h-full w-full sm:w-96 bg-white shadow-2xl z-40 flex flex-col transition-transform duration-300 ${
+      <aside
+        className={`fixed top-0 right-0 h-full w-full sm:w-[420px] bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 shadow-2xl z-50 flex flex-col transition-transform duration-200 ease-out ${
           carritoAbierto ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
-        <div className="flex items-center justify-between p-4 border-b border-slate-100">
+        {/* Cabecera */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/60 dark:bg-slate-900/60">
           <div>
-            <h2 className="font-bold text-lg text-slate-800">Carrito de Caja</h2>
-            <p className="text-xs text-slate-400">Cobro rápido en menos de 3 segundos</p>
+            <div className="flex items-center gap-2">
+              <h2 className="font-semibold text-base text-slate-900 dark:text-slate-100">
+                Carrito de venta
+              </h2>
+              <span className="text-[11px] px-2 py-0.5 rounded-full font-mono font-medium bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                {carrito.length}
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Presiona <kbd className="font-mono text-[10px] bg-slate-200 dark:bg-slate-800 px-1 py-0.5 rounded">F2</kbd> para cobrar
+            </p>
           </div>
           <button
+            type="button"
             onClick={() => setCarritoAbierto(false)}
-            className="w-10 h-10 rounded-xl bg-slate-100 text-slate-500 hover:text-slate-800 flex items-center justify-center text-lg leading-none"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           >
-            ✕
+            <X size={18} />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        {/* Lista de productos en el carrito */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-2.5">
           {carrito.length === 0 ? (
-            <p className="text-center text-gray-400 mt-10 text-sm">El carrito está vacío</p>
+            <div className="py-20 text-center text-slate-400 dark:text-slate-500">
+              <p className="text-sm font-medium">El carrito está vacío</p>
+              <p className="text-xs mt-1">Escanea un código o toca un producto para agregarlo</p>
+            </div>
           ) : (
             carrito.map((item) => (
-              <div key={item.id} className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                <div className="flex items-start justify-between gap-2 mb-2">
+              <div
+                key={item.id}
+                className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200/80 dark:border-slate-800 flex flex-col gap-2"
+              >
+                <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                    {item.foto_url && (
-                      <img
-                        src={item.foto_url}
-                        alt={item.nombre}
-                        className="w-10 h-10 rounded-lg object-cover border border-slate-200 shrink-0 bg-white"
-                      />
-                    )}
+                    <img
+                      src={resolverUrlFotoProducto(item.foto_url, item.nombre)}
+                      alt={item.nombre}
+                      className="w-10 h-10 rounded-lg object-cover border border-slate-200 dark:border-slate-700 shrink-0 bg-white dark:bg-slate-800"
+                    />
                     <div className="min-w-0">
-                      <p className="font-semibold text-sm text-slate-800 truncate">{item.nombre}</p>
-                      <p className="text-violet-600 text-xs font-medium">
-                        ${item.precio_venta.toLocaleString('es-CO')}
+                      <p className="font-semibold text-xs sm:text-sm text-slate-900 dark:text-slate-100 truncate">
+                        {item.nombre}
+                      </p>
+                      <p className="text-slate-500 dark:text-slate-400 text-xs">
+                        ${Number(item.precio_venta || 0).toLocaleString('es-CO')}
                         {ES_GRANEL(item.unidad_medida) && ` / ${item.unidad_medida}`}
                       </p>
                     </div>
                   </div>
                   <button
+                    type="button"
                     onClick={() => eliminar(item.id)}
-                    className="text-red-400 hover:text-red-600 text-sm shrink-0 p-1"
+                    className="p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
+                    title="Quitar del carrito"
                   >
-                    ✕
+                    <Trash2 size={14} />
                   </button>
                 </div>
 
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 dark:border-slate-800">
                   {ES_GRANEL(item.unidad_medida) ? (
                     <div className="flex items-center gap-2">
                       <input
@@ -129,47 +191,37 @@ export default function CartSidebar() {
                         max={item.cantidad_actual}
                         value={item.cantidad}
                         onChange={(e) => setCantidad(item.id, e.target.value)}
-                        className="w-24 border border-gray-300 rounded-lg px-2 py-1 text-sm text-center focus:outline-none focus:ring-2 focus:ring-violet-400"
+                        className="w-20 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 rounded-lg px-2 py-1 text-xs text-center font-medium focus:outline-none"
                       />
-                      <span className="text-xs text-gray-500">{item.unidad_medida}</span>
+                      <span className="text-xs text-slate-500">{item.unidad_medida}</span>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-0.5">
                       <button
+                        type="button"
                         onClick={() => restar(item.id)}
-                        className="w-8 h-8 bg-white border border-slate-200 hover:bg-slate-100 rounded-lg text-sm font-bold"
+                        className="w-7 h-7 flex items-center justify-center rounded text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-sm font-semibold"
                       >
-                        −
+                        <Minus size={13} />
                       </button>
-                      <span className="w-8 text-center text-sm font-bold">{item.cantidad}</span>
+                      <span className="w-7 text-center text-xs font-semibold text-slate-900 dark:text-slate-100">
+                        {item.cantidad}
+                      </span>
                       <button
+                        type="button"
                         onClick={() => agregar(item)}
-                        className="w-8 h-8 bg-white border border-slate-200 hover:bg-slate-100 rounded-lg text-sm font-bold"
+                        className="w-7 h-7 flex items-center justify-center rounded text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-sm font-semibold"
                       >
-                        +
+                        <Plus size={13} />
                       </button>
                     </div>
                   )}
 
-                  {ES_GRANEL(item.unidad_medida) ? (
-                    <div className="flex items-center gap-1">
-                      <span className="text-sm text-gray-500 font-semibold">$</span>
-                      <input
-                        type="number"
-                        min="0"
-                        value={Math.round(item.precio_venta * item.cantidad)}
-                        onChange={(e) => {
-                          const val = parseFloat(e.target.value) || 0
-                          setCantidad(item.id, val / item.precio_venta)
-                        }}
-                        className="w-20 border border-gray-300 bg-white rounded-md px-1 py-1 text-sm text-right font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-violet-400"
-                      />
-                    </div>
-                  ) : (
-                    <span className="text-sm font-bold text-slate-800">
-                      ${(item.precio_venta * item.cantidad).toLocaleString('es-CO', { maximumFractionDigits: 0 })}
-                    </span>
-                  )}
+                  <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100">
+                    ${(Number(item.precio_venta || 0) * Number(item.cantidad || 0)).toLocaleString('es-CO', {
+                      maximumFractionDigits: 0,
+                    })}
+                  </span>
                 </div>
               </div>
             ))
@@ -178,61 +230,93 @@ export default function CartSidebar() {
 
         {mensaje && (
           <div
-            className={`mx-4 p-3 rounded-xl text-xs font-medium ${
+            className={`mx-4 p-3 rounded-xl text-xs font-medium flex items-start gap-2 ${
               mensaje.tipo === 'ok'
-                ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                : 'bg-red-50 text-red-700 border border-red-200'
+                ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900/50'
+                : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-900/50'
             }`}
           >
-            {mensaje.texto}
+            {mensaje.tipo === 'ok' ? (
+              <CheckCircle2 size={15} className="shrink-0 mt-0.5" />
+            ) : (
+              <AlertCircle size={15} className="shrink-0 mt-0.5" />
+            )}
+            <span>{mensaje.texto}</span>
           </div>
         )}
 
-        <div className="p-4 border-t border-slate-100 space-y-3 bg-slate-50/60">
-          {/* Método de pago rápido */}
+        {/* Panel inferior de pago */}
+        <div className="p-4 border-t border-slate-100 dark:border-slate-800 space-y-3 bg-slate-50/60 dark:bg-slate-900/60">
           <div>
-            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-              Método de Pago
-            </p>
+            <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1.5">
+              Método de pago
+            </span>
             <div className="grid grid-cols-3 gap-1.5">
-              {METODOS_PAGO.map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => setMetodoPago(m.id)}
-                  className={`py-2 px-2 rounded-xl text-xs font-semibold border transition-all ${
-                    metodoPago === m.id
-                      ? 'bg-violet-600 text-white border-violet-600 shadow-sm'
-                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                  }`}
-                >
-                  {m.label}
-                </button>
-              ))}
+              {METODOS_PAGO.map((m) => {
+                const Icon = m.icon
+                const seleccionado = metodoPago === m.id
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setMetodoPago(m.id)}
+                    className={`py-2 px-2 rounded-xl text-xs font-medium border flex items-center justify-center gap-1.5 transition-all min-h-[38px] ${
+                      seleccionado
+                        ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 border-transparent shadow-xs'
+                        : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-750'
+                    }`}
+                  >
+                    <Icon size={14} />
+                    <span>{m.label}</span>
+                  </button>
+                )
+              })}
             </div>
           </div>
 
           {metodoPago === 'Efectivo' && carrito.length > 0 && (
-            <div className="grid grid-cols-2 gap-2 items-center">
-              <div>
-                <label className="text-[11px] text-slate-500 font-medium block mb-0.5">
-                  Recibido ($)
-                </label>
-                <input
-                  type="number"
-                  placeholder={String(Math.round(total))}
-                  value={montoRecibido}
-                  onChange={(e) => setMontoRecibido(e.target.value)}
-                  className="w-full border border-slate-200 bg-white rounded-lg px-2.5 py-1.5 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-violet-400"
-                />
+            <div className="space-y-2 bg-white dark:bg-slate-800/80 p-3 rounded-xl border border-slate-200 dark:border-slate-700/80">
+              <div className="flex flex-wrap gap-1">
+                <button
+                  type="button"
+                  onClick={() => setMontoRecibido(String(Math.round(total)))}
+                  className="px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200"
+                >
+                  Exacto
+                </button>
+                {BILLETES_RAPIDOS.map((billete) => (
+                  <button
+                    key={billete}
+                    type="button"
+                    onClick={() => setMontoRecibido(String(billete))}
+                    className="px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200"
+                  >
+                    ${(billete / 1000).toLocaleString('es-CO')}k
+                  </button>
+                ))}
               </div>
-              <div className="bg-emerald-50 border border-emerald-100 rounded-lg px-2.5 py-1.5 text-right">
-                <span className="text-[10px] font-bold text-emerald-700 uppercase block">
-                  Cambio a devolver
-                </span>
-                <span className="text-sm font-extrabold text-emerald-700">
-                  ${cambio.toLocaleString('es-CO', { maximumFractionDigits: 0 })}
-                </span>
+
+              <div className="grid grid-cols-2 gap-2 items-center">
+                <div>
+                  <label className="text-[10px] text-slate-500 dark:text-slate-400 font-medium block">
+                    Recibido ($)
+                  </label>
+                  <input
+                    type="number"
+                    placeholder={String(Math.round(total))}
+                    value={montoRecibido}
+                    onChange={(e) => setMontoRecibido(e.target.value)}
+                    className="w-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 rounded-lg px-2.5 py-1 text-sm font-semibold text-slate-900 dark:text-slate-100 focus:outline-none"
+                  />
+                </div>
+                <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/50 rounded-lg px-2.5 py-1 text-right">
+                  <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 uppercase block">
+                    Vueltas
+                  </span>
+                  <span className="text-sm font-bold text-emerald-700 dark:text-emerald-300">
+                    ${cambio.toLocaleString('es-CO', { maximumFractionDigits: 0 })}
+                  </span>
+                </div>
               </div>
             </div>
           )}
@@ -240,37 +324,43 @@ export default function CartSidebar() {
           {metodoPago === 'Fiado' && carrito.length > 0 && (
             <input
               type="text"
-              placeholder="Nombre del cliente (fiado)..."
+              placeholder="Nombre del cliente fiado..."
               value={clienteNombre}
               onChange={(e) => setClienteNombre(e.target.value)}
-              className="w-full border border-amber-300 bg-amber-50/40 rounded-lg px-3 py-2 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-amber-400"
+              className="w-full border border-amber-300 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/30 rounded-xl px-3 py-2 text-xs font-medium text-slate-900 dark:text-slate-100 focus:outline-none"
             />
           )}
 
-          <div className="flex justify-between items-baseline font-bold text-lg pt-1">
-            <span className="text-slate-700">Total a cobrar</span>
-            <span className="text-2xl font-extrabold text-violet-700">
+          <div className="flex justify-between items-baseline pt-1">
+            <span className="text-xs uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400">
+              Total a cobrar
+            </span>
+            <span className="text-2xl font-bold text-slate-900 dark:text-slate-100">
               ${total.toLocaleString('es-CO', { maximumFractionDigits: 0 })}
             </span>
           </div>
 
           <button
+            type="button"
             onClick={checkout}
             disabled={!carrito.length || procesando}
-            className="w-full bg-violet-600 hover:bg-violet-700 disabled:bg-gray-200 disabled:cursor-not-allowed text-white font-bold py-3.5 rounded-xl transition-colors min-h-[48px] shadow-sm"
+            className="w-full bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 dark:disabled:text-slate-600 text-white font-semibold py-3.5 rounded-xl transition-all min-h-[48px] flex items-center justify-center gap-2 active:scale-[0.99]"
           >
-            {procesando ? 'Procesando...' : `Cobrar con ${metodoPago}`}
+            <Zap size={16} />
+            <span>{procesando ? 'Procesando...' : `Cobrar ($${total.toLocaleString('es-CO')})`}</span>
           </button>
+
           {carrito.length > 0 && (
             <button
+              type="button"
               onClick={vaciar}
-              className="w-full text-xs text-slate-400 hover:text-red-500 transition-colors py-1"
+              className="w-full text-xs text-slate-400 hover:text-rose-500 transition-colors py-1 text-center"
             >
-              Vaciar carrito
+              Vaciar carrito (Esc)
             </button>
           )}
         </div>
-      </div>
+      </aside>
     </>
   )
 }

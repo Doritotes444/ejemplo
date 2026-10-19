@@ -22,12 +22,12 @@ export default function ProductoCard({
 
   return (
     <div
-      className={`bg-white rounded-2xl border border-slate-200 shadow-xs flex flex-col overflow-hidden transition-colors ${
-        sinStock ? 'opacity-80' : ''
+      className={`bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden transition-all hover:border-slate-300 dark:hover:border-slate-700 ${
+        sinStock ? 'opacity-75' : ''
       }`}
     >
-      {/* Fotografía uniforme obligatoria */}
-      <div className="relative w-full aspect-[4/3] bg-slate-100 overflow-hidden border-b border-slate-100">
+      {/* Fotografía uniforme */}
+      <div className="relative w-full aspect-[4/3] bg-slate-100 dark:bg-slate-800/80 overflow-hidden border-b border-slate-100 dark:border-slate-800">
         <img
           src={urlImagen}
           alt={producto.nombre}
@@ -37,21 +37,21 @@ export default function ProductoCard({
 
         <div className="absolute top-2 left-2 flex flex-wrap gap-1">
           {producto.es_frecuente && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-500 text-white text-[10px] font-bold shadow-xs">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-500 text-white text-[10px] font-semibold">
               <Star size={11} fill="currentColor" /> Rápido
             </span>
           )}
           {producto.es_provisional && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-bold">
-              <Camera size={11} /> Captura provisional
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-100 dark:bg-amber-950/80 text-amber-900 dark:text-amber-300 border border-amber-300 dark:border-amber-800 text-[10px] font-medium">
+              <Camera size={11} /> Provisional
             </span>
           )}
         </div>
 
         <span
-          className={`absolute top-2 right-2 text-[11px] px-2.5 py-0.5 rounded-lg font-bold shadow-xs ${
+          className={`absolute top-2 right-2 text-[11px] px-2.5 py-0.5 rounded-lg font-semibold ${
             sinStock
-              ? 'bg-red-600 text-white'
+              ? 'bg-rose-600 text-white'
               : stockBajo
               ? 'bg-amber-500 text-white'
               : 'bg-emerald-600 text-white'
@@ -67,51 +67,51 @@ export default function ProductoCard({
       <div className="p-3.5 flex flex-col flex-1 gap-2">
         <div>
           <div className="flex items-center justify-between gap-2">
-            <span className="text-[11px] font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md">
+            <span className="text-[11px] font-medium text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
               {producto.categoria || 'General'}
             </span>
-            <span className="text-[11px] text-slate-400 font-mono truncate">
+            <span className="text-[11px] text-slate-400 dark:text-slate-500 font-mono truncate">
               #{producto.codigo_barras}
             </span>
           </div>
-          <h3 className="font-bold text-slate-900 text-sm sm:text-base mt-1.5 line-clamp-2 leading-snug">
+          <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-sm sm:text-base mt-1.5 line-clamp-2 leading-snug">
             {producto.nombre}
           </h3>
           {producto.proveedor && (
-            <p className="text-xs text-slate-500 mt-0.5 truncate">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">
               Prov: {producto.proveedor}
             </p>
           )}
         </div>
 
-        <div className="mt-auto pt-2 border-t border-slate-100 flex items-baseline justify-between">
+        <div className="mt-auto pt-2 border-t border-slate-100 dark:border-slate-800 flex items-baseline justify-between">
           <div>
-            <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">
+            <p className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500 font-medium">
               Precio venta
             </p>
-            <p className="text-lg font-extrabold text-slate-900">
+            <p className="text-lg font-bold text-slate-900 dark:text-slate-100">
               ${Number(producto.precio_venta || 0).toLocaleString('es-CO')}
             </p>
           </div>
           {esAdmin && producto.precio_costo !== undefined && (
             <div className="text-right">
-              <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">
+              <p className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500 font-medium">
                 Costo
               </p>
-              <p className="text-xs font-bold text-slate-600">
+              <p className="text-xs font-medium text-slate-600 dark:text-slate-400">
                 ${Number(producto.precio_costo || 0).toLocaleString('es-CO')}
               </p>
             </div>
           )}
         </div>
 
-        {/* Botones táctiles cómodos (44px) */}
+        {/* Botones táctiles cómodos */}
         <div className="grid grid-cols-12 gap-1.5 pt-1">
           <button
             type="button"
             onClick={() => agregar(producto)}
             disabled={sinStock}
-            className="col-span-6 min-h-[44px] bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors"
+            className="col-span-6 min-h-[44px] bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 dark:disabled:text-slate-600 text-white text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 transition-colors"
           >
             <ShoppingCart size={15} />
             <span>Vender</span>
@@ -123,7 +123,7 @@ export default function ProductoCard({
                 type="button"
                 onClick={() => onMovimiento && onMovimiento(producto)}
                 title="Registrar entrada, salida o ajuste de stock"
-                className="col-span-2 min-h-[44px] bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl flex items-center justify-center transition-colors"
+                className="col-span-2 min-h-[44px] bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl flex items-center justify-center transition-colors"
               >
                 <ArrowUpDown size={15} />
               </button>
@@ -131,7 +131,7 @@ export default function ProductoCard({
                 type="button"
                 onClick={() => onEditar(producto)}
                 title="Editar producto y fotografía"
-                className="col-span-2 min-h-[44px] bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl flex items-center justify-center transition-colors"
+                className="col-span-2 min-h-[44px] bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl flex items-center justify-center transition-colors"
               >
                 <Edit3 size={15} />
               </button>
@@ -139,7 +139,7 @@ export default function ProductoCard({
                 type="button"
                 onClick={() => onEliminar(producto.id)}
                 title="Desactivar producto"
-                className="col-span-2 min-h-[44px] bg-red-50 hover:bg-red-100 text-red-600 rounded-xl flex items-center justify-center transition-colors"
+                className="col-span-2 min-h-[44px] bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 rounded-xl flex items-center justify-center transition-colors"
               >
                 <Trash2 size={15} />
               </button>

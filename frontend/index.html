@@ -8,9 +8,21 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="description" content="Tiendapp — Plataforma SaaS de inventario con fotografías, punto de venta rápido, caja, comprobantes QR y finanzas 360° para tiendas de barrio en Colombia." />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <title>Tiendapp — Gestión Inteligente de Tiendas</title>
+    <script>
+      (function() {
+        try {
+          var t = localStorage.getItem('tiendapp_theme');
+          var d = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          if (t === 'dark' || (!t && d)) {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+        } catch (e) {}
+      })();
+    </script>
   </head>
-  <body class="bg-slate-50 text-slate-900 antialiased selection:bg-blue-600 selection:text-white">
+  <body class="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 antialiased selection:bg-emerald-600 selection:text-white">
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

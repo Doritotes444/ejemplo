@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { useCart } from '../context/CartContext'
-import { useProductos } from '../hooks/useProductos'
+import { useProductos, resolverUrlFotoProducto } from '../hooks/useProductos'
 import { useVentas } from '../hooks/useVentas'
 import authService from '../services/authService'
 import usuarioService from '../services/usuarioService'
@@ -29,6 +29,11 @@ import {
   Trash2,
   Ban,
   Star,
+  Banknote,
+  Smartphone,
+  CreditCard,
+  Building2,
+  BookOpen,
 } from 'lucide-react'
 
 const BASE = import.meta.env.VITE_API_URL || '/api'
@@ -40,12 +45,12 @@ const TABS_HISTORICO = [
 ]
 
 const METODOS_PAGO = [
-  { id: 'Efectivo', label: '💵 Efectivo' },
-  { id: 'Nequi', label: '🟣 Nequi' },
-  { id: 'DaviPlata', label: '🔴 DaviPlata' },
-  { id: 'Transferencia', label: '🏦 Transf.' },
-  { id: 'Tarjeta', label: '💳 Tarjeta' },
-  { id: 'Fiado', label: '📒 Fiado' },
+  { id: 'Efectivo', label: 'Efectivo', icon: Banknote },
+  { id: 'Nequi', label: 'Nequi', icon: Smartphone },
+  { id: 'DaviPlata', label: 'DaviPlata', icon: Smartphone },
+  { id: 'Transferencia', label: 'Transf.', icon: Building2 },
+  { id: 'Tarjeta', label: 'Tarjeta', icon: CreditCard },
+  { id: 'Fiado', label: 'Fiado', icon: BookOpen },
 ]
 
 const BILLETES_RAPIDOS = [2000, 5000, 10000, 20000, 50000, 100000]
@@ -461,6 +466,40 @@ export default function Ventas() {
     }
   }
 
+  // Atajos de teclado en el punto de venta (POS)
+  useEffect(() => {
+    if (modoVista !== 'pos') return
+    const onKey = (e) => {
+      if (e.key === 'F2') {
+        e.preventDefault()
+        if (carrito.length > 0 && !procesandoVenta) {
+          confirmarVentaRapida()
+        }
+      } else if (e.key === 'Escape') {
+        if (codigoNoEncontrado) {
+          setCodigoNoEncontrado(null)
+        } else if (escanerCamaraAbierto) {
+          setEscanerCamaraAbierto(false)
+        } else if (modalCrearAbierto) {
+          setModalCrearAbierto(false)
+        } else if (carrito.length > 0) {
+          vaciar()
+        }
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [
+    modoVista,
+    carrito.length,
+    procesandoVenta,
+    confirmarVentaRapida,
+    codigoNoEncontrado,
+    escanerCamaraAbierto,
+    modalCrearAbierto,
+    vaciar,
+  ])
+
   const guardarProductoProvisionalYAnadir = async (form) => {
     const creado = await crearProducto({
       ...form,
@@ -770,39 +809,33 @@ export default function Ventas() {
                     type="button"
                     disabled={agotado}
                     onClick={() => agregar(p)}
-                    className={`group text-left bg-white rounded-2xl border p-2.5 transition-all flex flex-col justify-between relative min-h-[148px] ${
+                    className={`group text-left bg-white dark:bg-slate-900 rounded-2xl border p-2.5 transition-all flex flex-col justify-between relative min-h-[148px] ${
                       agotado
-                        ? 'opacity-50 border-slate-200 cursor-not-allowed'
+                        ? 'opacity-50 border-slate-200 dark:border-slate-800 cursor-not-allowed'
                         : enCarrito
-                        ? 'border-violet-500 ring-2 ring-violet-500/20 shadow-sm'
-                        : 'border-slate-200 hover:border-violet-300 hover:shadow-sm active:scale-[0.99]'
+                        ? 'border-slate-900 dark:border-slate-100 ring-2 ring-slate-900/10 dark:ring-slate-100/10 shadow-xs'
+                        : 'border-slate-200 dark:border-slate-800 hover:border-slate-400 dark:hover:border-slate-600 active:scale-[0.99]'
                     }`}
                   >
                     {enCarrito && (
-                      <span className="absolute top-2 right-2 z-10 bg-violet-600 text-white text-xs font-extrabold w-6 h-6 rounded-full flex items-center justify-center shadow">
+                      <span className="absolute top-2 right-2 z-10 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center shadow">
                         {enCarrito.cantidad}
                       </span>
                     )}
-                    <div className="w-full h-24 rounded-xl bg-slate-100 overflow-hidden mb-2 border border-slate-100">
-                      {p.foto_url ? (
-                        <img
-                          src={p.foto_url}
-                          alt={p.nombre}
-                          loading="lazy"
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-2xl">
-                          📦
-                        </div>
-                      )}
+                    <div className="w-full h-24 rounded-xl bg-slate-100 dark:bg-slate-800 overflow-hidden mb-2 border border-slate-100 dark:border-slate-800">
+                      <img
+                        src={resolverUrlFotoProducto(p.foto_url, p.nombre)}
+                        alt={p.nombre}
+                        loading="lazy"
+                        className="w-full h-full object-cover"
+                      />
                     </div>
                     <div>
-                      <p className="font-bold text-xs sm:text-sm text-slate-800 line-clamp-1">
+                      <p className="font-semibold text-xs sm:text-sm text-slate-900 dark:text-slate-100 line-clamp-1">
                         {p.nombre}
                       </p>
                       <div className="flex items-center justify-between mt-1">
-                        <span className="text-sm font-extrabold text-violet-700">
+                        <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
                           ${fmt(p.precio_venta)}
                         </span>
                         <span className="text-[10px] text-slate-400">
@@ -817,23 +850,23 @@ export default function Ventas() {
           </div>
 
           {/* Columna derecha: Ticket Activo + Pago en 1 Toque */}
-          <div className="lg:col-span-5 bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-5 space-y-4 lg:sticky lg:top-20">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="lg:col-span-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 sm:p-5 space-y-4 lg:sticky lg:top-20">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <div>
-                <h2 className="font-bold text-base text-slate-900">
-                  Cuenta Actual ({carrito.reduce((s, i) => s + i.cantidad, 0)} ítems)
+                <h2 className="font-semibold text-base text-slate-900 dark:text-slate-100">
+                  Cuenta actual ({carrito.reduce((s, i) => s + i.cantidad, 0)} ítems)
                 </h2>
-                <p className="text-xs text-slate-400">
-                  El total y el inventario local se actualizan al instante
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Total e inventario sincronizados al instante
                 </p>
               </div>
               {carrito.length > 0 && (
                 <button
                   type="button"
                   onClick={vaciar}
-                  className="text-xs text-red-500 hover:text-red-700 font-semibold flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-red-50"
+                  className="text-xs text-rose-600 dark:text-rose-400 hover:text-rose-700 font-medium flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
                 >
-                  <Trash2 size={14} /> Vaciar
+                  <Trash2 size={14} /> Vaciar (Esc)
                 </button>
               )}
             </div>
@@ -841,30 +874,30 @@ export default function Ventas() {
             {/* Lista de ítems en el carrito */}
             <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
               {carrito.length === 0 ? (
-                <div className="py-8 text-center text-slate-400 text-xs">
+                <div className="py-8 text-center text-slate-400 dark:text-slate-500 text-xs">
                   Escanea un código de barras o toca un producto para iniciar la venta.
                 </div>
               ) : (
                 carrito.map((item) => (
                   <div
                     key={item.id}
-                    className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-50 border border-slate-100"
+                    className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800"
                   >
                     <div className="flex items-center gap-2.5 min-w-0 flex-1">
                       {item.foto_url && (
                         <img
-                          src={item.foto_url}
+                          src={resolverUrlFotoProducto(item.foto_url, item.nombre)}
                           alt={item.nombre}
-                          className="w-10 h-10 rounded-lg object-cover border border-slate-200 shrink-0 bg-white"
+                          className="w-10 h-10 rounded-lg object-cover border border-slate-200 dark:border-slate-700 shrink-0 bg-white dark:bg-slate-800"
                         />
                       )}
                       <div className="min-w-0">
-                        <p className="font-semibold text-xs sm:text-sm text-slate-800 truncate">
+                        <p className="font-semibold text-xs sm:text-sm text-slate-900 dark:text-slate-100 truncate">
                           {item.nombre}
                         </p>
-                        <p className="text-[11px] text-slate-500">
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
                           ${fmt(item.precio_venta)} × {item.cantidad} ={' '}
-                          <strong className="text-violet-700">
+                          <strong className="text-slate-900 dark:text-slate-100">
                             ${fmt(item.precio_venta * item.cantidad)}
                           </strong>
                         </p>
@@ -875,7 +908,7 @@ export default function Ventas() {
                       <button
                         type="button"
                         onClick={() => restar(item.id)}
-                        className="w-9 h-9 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 flex items-center justify-center text-slate-700"
+                        className="w-9 h-9 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-300"
                         aria-label="Restar unidad"
                       >
                         <Minus size={14} />
@@ -886,12 +919,12 @@ export default function Ventas() {
                         min="0.001"
                         value={item.cantidad}
                         onChange={(e) => setCantidad(item.id, e.target.value)}
-                        className="w-12 text-center text-xs font-bold bg-white border border-slate-200 rounded-lg py-2"
+                        className="w-12 text-center text-xs font-bold bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-lg py-2"
                       />
                       <button
                         type="button"
                         onClick={() => agregar(item)}
-                        className="w-9 h-9 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 flex items-center justify-center text-slate-700"
+                        className="w-9 h-9 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-300"
                         aria-label="Sumar unidad"
                       >
                         <Plus size={14} />
@@ -903,36 +936,41 @@ export default function Ventas() {
             </div>
 
             {/* Selección de método de pago en 1 toque */}
-            <div className="pt-2 border-t border-slate-100">
-              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2">
-                Método de Pago Rápido
+            <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+              <label className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-2">
+                Método de pago rápido
               </label>
               <div className="grid grid-cols-3 gap-2">
-                {METODOS_PAGO.map((m) => (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => setMetodoPago(m.id)}
-                    className={`py-2.5 px-2 rounded-xl text-xs font-bold border transition-all min-h-[44px] ${
-                      metodoPago === m.id
-                        ? 'bg-violet-600 text-white border-violet-600 shadow-sm'
-                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                    }`}
-                  >
-                    {m.label}
-                  </button>
-                ))}
+                {METODOS_PAGO.map((m) => {
+                  const Icon = m.icon
+                  const activo = metodoPago === m.id
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setMetodoPago(m.id)}
+                      className={`py-2 px-2 rounded-xl text-xs font-medium border transition-all min-h-[44px] flex items-center justify-center gap-1.5 ${
+                        activo
+                          ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 border-transparent shadow-xs'
+                          : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-750'
+                      }`}
+                    >
+                      <Icon size={14} />
+                      <span>{m.label}</span>
+                    </button>
+                  )
+                })}
               </div>
             </div>
 
             {/* Controles de efectivo y cálculo automático de vueltas */}
             {metodoPago === 'Efectivo' && carrito.length > 0 && (
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-2">
+              <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-100 dark:border-slate-800 space-y-2">
                 <div className="flex flex-wrap gap-1.5">
                   <button
                     type="button"
                     onClick={() => setMontoRecibido(String(Math.round(total)))}
-                    className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-violet-50"
+                    className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-600"
                   >
                     Exacto
                   </button>
@@ -941,7 +979,7 @@ export default function Ventas() {
                       key={billete}
                       type="button"
                       onClick={() => setMontoRecibido(String(billete))}
-                      className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-violet-50"
+                      className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-600"
                     >
                       ${fmt(billete)}
                     </button>
@@ -949,20 +987,22 @@ export default function Ventas() {
                 </div>
                 <div className="grid grid-cols-2 gap-2 items-center pt-1">
                   <div>
-                    <span className="text-[11px] text-slate-500 block">Efectivo recibido ($)</span>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
+                      Efectivo recibido ($)
+                    </span>
                     <input
                       type="number"
                       placeholder={String(Math.round(total))}
                       value={montoRecibido}
                       onChange={(e) => setMontoRecibido(e.target.value)}
-                      className="w-full border border-slate-200 bg-white rounded-lg px-2.5 py-1.5 text-sm font-bold"
+                      className="w-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded-lg px-2.5 py-1.5 text-sm font-bold"
                     />
                   </div>
-                  <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-1.5 text-right">
-                    <span className="text-[10px] font-bold text-emerald-700 uppercase block">
+                  <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/50 rounded-lg px-3 py-1.5 text-right">
+                    <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase block">
                       Cambio / Vueltas
                     </span>
-                    <span className="text-base font-extrabold text-emerald-700">
+                    <span className="text-base font-extrabold text-emerald-700 dark:text-emerald-300">
                       ${fmt(cambio)}
                     </span>
                   </div>
@@ -972,7 +1012,7 @@ export default function Ventas() {
 
             {metodoPago === 'Fiado' && carrito.length > 0 && (
               <div>
-                <label className="text-xs font-semibold text-amber-800 block mb-1">
+                <label className="text-xs font-semibold text-amber-800 dark:text-amber-300 block mb-1">
                   Nombre del cliente (Cuenta por cobrar / Fiado)
                 </label>
                 <input
@@ -980,7 +1020,7 @@ export default function Ventas() {
                   placeholder="Ej: Doña Marta - Casa esquinera"
                   value={clienteNombre}
                   onChange={(e) => setClienteNombre(e.target.value)}
-                  className="w-full border border-amber-300 bg-amber-50/40 rounded-xl px-3 py-2.5 text-sm"
+                  className="w-full border border-amber-300 dark:border-amber-700 bg-amber-50/40 dark:bg-amber-950/40 rounded-xl px-3 py-2.5 text-sm text-slate-900 dark:text-slate-100"
                 />
               </div>
             )}
@@ -989,8 +1029,8 @@ export default function Ventas() {
               <div
                 className={`p-3 rounded-xl text-xs font-semibold ${
                   feedbackPos.tipo === 'ok'
-                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                    : 'bg-red-50 text-red-700 border border-red-200'
+                    ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900/50'
+                    : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-900/50'
                 }`}
               >
                 {feedbackPos.texto}
@@ -998,12 +1038,12 @@ export default function Ventas() {
             )}
 
             {/* Total y Botón Principal de Confirmación */}
-            <div className="pt-2 border-t border-slate-100 space-y-3">
+            <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-3">
               <div className="flex items-baseline justify-between">
-                <span className="text-sm font-bold text-slate-600 uppercase tracking-wider">
-                  Total a Cobrar
+                <span className="text-xs uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400">
+                  Total a cobrar
                 </span>
-                <span className="text-3xl font-extrabold text-violet-700">
+                <span className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-100">
                   ${fmt(total)}
                 </span>
               </div>
@@ -1012,12 +1052,14 @@ export default function Ventas() {
                 type="button"
                 disabled={!carrito.length || procesandoVenta}
                 onClick={confirmarVentaRapida}
-                className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 text-white font-extrabold py-4 rounded-xl text-base shadow-sm transition-all min-h-[52px] flex items-center justify-center gap-2"
+                className="w-full bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 dark:disabled:text-slate-600 text-white font-semibold py-4 rounded-xl text-base shadow-xs transition-all min-h-[52px] flex items-center justify-center gap-2 active:scale-[0.99]"
               >
-                <Zap size={20} />
-                {procesandoVenta
-                  ? 'Registrando venta...'
-                  : `Confirmar Venta (${metodoPago})`}
+                <Zap size={18} />
+                <span>
+                  {procesandoVenta
+                    ? 'Procesando venta...'
+                    : `Confirmar venta con ${metodoPago} [F2]`}
+                </span>
               </button>
             </div>
           </div>

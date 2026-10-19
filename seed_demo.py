@@ -73,7 +73,18 @@ def inicializar_demo():
             empresa_id=empresa_id,
             is_active=True,
         )
-        db.add(cajero)
+        # SuperAdmin de plataforma para login único
+        sa_hash = auth_service.hash_password("SuperAdmin2026!")
+        superadmin = models.Usuario(
+            email="superadmin@tiendapp.co",
+            nombre="Equipo Tiendapp (SuperAdmin)",
+            hashed_password=sa_hash,
+            rol=models.RolUsuario.ADMIN,
+            empresa_id=empresa_id,
+            es_superadmin=True,
+            is_active=True,
+        )
+        db.add_all([cajero, superadmin])
         db.commit()
 
         print("4. Poblando catálogo con productos reales y fotografías obligatorias...")
@@ -307,11 +318,9 @@ def inicializar_demo():
         print("--------------------------------------------------------------")
         print("URL Aplicación:     http://localhost:5173")
         print("URL API / Swagger:  http://localhost:8000/docs")
-        print("Usuario Tendero:    tendero@tiendapp.co")
-        print("Clave Tendero:      Tienda2026!")
-        print("Usuario Cajero:     cajero@tiendapp.co")
-        print("Clave Cajero:       Cajero2026!")
-        print("Clave SuperAdmin:   tiendapp-superadmin-2026")
+        print("Usuario Tendero:    tendero@tiendapp.co     (Clave: Tienda2026!)")
+        print("Usuario Cajero:     cajero@tiendapp.co      (Clave: Cajero2026!)")
+        print("Usuario SuperAdmin: superadmin@tiendapp.co  (Clave: SuperAdmin2026!)")
         print("==============================================================")
     finally:
         db.close()

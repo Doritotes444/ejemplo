@@ -22,7 +22,8 @@ const SuperAdmin = lazy(() => import('./pages/SuperAdmin'))
 
 function RootRedirect() {
   const { usuario } = useAuth()
-  return <Navigate to={isAdmin(usuario) ? '/dashboard' : '/ventas'} replace />
+  if (usuario?.es_superadmin) return <Navigate to="/superadmin" replace />
+  return <Navigate to="/ventas" replace />
 }
 
 function PageLoader() {
@@ -64,7 +65,10 @@ export default function App() {
           </Route>
         </Route>
 
-        <Route path="/superadmin" element={<SuperAdmin />} />
+        {/* 🛠 Panel de Plataforma Tiendapp (Exclusivo SuperAdmin) */}
+        <Route element={<ProtectedRoute superadminOnly />}>
+          <Route path="/superadmin" element={<SuperAdmin />} />
+        </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

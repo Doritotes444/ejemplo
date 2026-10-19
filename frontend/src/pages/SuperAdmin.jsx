@@ -1,16 +1,24 @@
 import { useState, useEffect, useCallback } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
+import { useTheme } from '../context/ThemeContext'
+import { ArrowLeft, Shield, Sun, Moon, LogOut } from 'lucide-react'
 
 const API = import.meta.env.VITE_API_URL || '/api'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function apiFetch(path, clave, options = {}) {
+  const opts = (clave && typeof clave === 'object') ? clave : options
+  const keyHeader = typeof clave === 'string' && clave ? { 'x-superadmin-key': clave } : {}
+  const token = localStorage.getItem('access_token')
   return fetch(`${API}${path}`, {
-    ...options,
+    ...opts,
     headers: {
       'Content-Type': 'application/json',
-      'x-superadmin-key': clave,
-      ...(options.headers || {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...keyHeader,
+      ...(opts.headers || {}),
     },
   })
 }
@@ -104,80 +112,6 @@ function ActiveBadge({ activo }) {
     <span className="inline-block px-2 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-700">
       Inactivo
     </span>
-  )
-}
-
-// ─── Auth Screen ──────────────────────────────────────────────────────────────
-
-function PantallaLogin({ onLogin }) {
-  const [clave, setClave] = useState('')
-  const [error, setError] = useState('')
-  const [cargando, setCargando] = useState(false)
-
-  async function handleSubmit(e) {
-    e.preventDefault()
-    if (!clave.trim()) return
-    setCargando(true)
-    setError('')
-    try {
-      const res = await apiFetch('/superadmin/empresas', clave.trim())
-      if (res.ok) {
-        localStorage.setItem('x-superadmin-key', clave.trim())
-        onLogin(clave.trim())
-      } else if (res.status === 403) {
-        setError('Clave incorrecta')
-      } else {
-        setError('Error de conexión')
-      }
-    } catch {
-      setError('Error de conexión')
-    } finally {
-      setCargando(false)
-    }
-  }
-
-  return (
-    <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm">
-        <div className="mb-6 text-center">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-indigo-100 mb-3">
-            <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-            </svg>
-          </div>
-          <h1 className="text-xl font-bold text-slate-800">Panel Super Admin</h1>
-          <p className="text-sm text-slate-500 mt-1">Ingresa la clave de administrador para continuar</p>
-        </div>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1" htmlFor="clave">
-              Clave de acceso
-            </label>
-            <input
-              id="clave"
-              type="password"
-              placeholder="Clave de acceso"
-              value={clave}
-              onChange={(e) => setClave(e.target.value)}
-              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              autoFocus
-            />
-          </div>
-          {error && (
-            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-              {error}
-            </p>
-          )}
-          <button
-            type="submit"
-            disabled={cargando || !clave.trim()}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold rounded-lg py-2 text-sm transition-colors"
-          >
-            {cargando ? 'Verificando...' : 'Ingresar'}
-          </button>
-        </form>
-      </div>
-    </div>
   )
 }
 
@@ -1063,8 +997,9 @@ function TabAuditoria({ clave }) {
 
 // ─── Main Panel ───────────────────────────────────────────────────────────────
 
-function PanelPrincipal({ clave, onLogout }) {
+function PanelPrincipal({ clave = '', usuario, onLogout }) {
   const [tabActiva, setTabActiva] = useState('comercios')
+  const { tema, setTema } = useTheme()
 
   const TABS = [
     { id: 'comercios', label: 'Tiendas y Comercios' },
@@ -1075,35 +1010,64 @@ function PanelPrincipal({ clave, onLogout }) {
   ]
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col transition-colors">
       {/* Header */}
-      <header className="bg-slate-800 text-white px-6 py-3 flex items-center justify-between shadow">
+      <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 py-3 flex items-center justify-between shadow-xs">
         <div className="flex items-center gap-3">
-          <svg className="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-          </svg>
-          <span className="font-bold text-base tracking-wide">Panel Super Admin</span>
-          <span className="hidden sm:inline text-slate-400 text-xs font-mono ml-2">Tiendapp · Gestión Neiva</span>
+          <Link
+            to="/ventas"
+            className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-colors mr-2"
+            title="Volver al punto de venta"
+          >
+            <ArrowLeft size={16} />
+            <span className="hidden sm:inline">Tienda</span>
+          </Link>
+          <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center text-white shadow-xs">
+            <Shield size={18} strokeWidth={2.4} />
+          </div>
+          <div>
+            <h1 className="font-bold text-sm sm:text-base tracking-tight text-slate-900 dark:text-slate-100 leading-tight">
+              Plataforma SuperAdmin
+            </h1>
+            <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+              Gobierno global de Tiendapp
+            </p>
+          </div>
         </div>
-        <button
-          onClick={onLogout}
-          className="text-sm text-slate-300 hover:text-white bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded-lg font-medium transition-colors"
-        >
-          Cerrar sesion
-        </button>
+
+        <div className="flex items-center gap-2">
+          {/* Toggle de tema */}
+          <button
+            type="button"
+            onClick={() => setTema(tema === 'dark' ? 'light' : 'dark')}
+            className="p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+            title="Cambiar tema"
+          >
+            {tema === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
+
+          <button
+            type="button"
+            onClick={onLogout}
+            className="flex items-center gap-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 px-3 py-1.5 rounded-xl border border-rose-200 dark:border-rose-900 transition-colors"
+          >
+            <LogOut size={14} />
+            <span>Cerrar sesión</span>
+          </button>
+        </div>
       </header>
 
       {/* Tabs */}
-      <div className="bg-white border-b border-slate-200 px-6 overflow-x-auto">
+      <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 overflow-x-auto">
         <nav className="flex gap-6">
           {TABS.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setTabActiva(tab.id)}
-              className={`py-3 text-sm font-semibold border-b-2 whitespace-nowrap transition-colors ${
+              className={`py-3 text-xs sm:text-sm font-semibold border-b-2 whitespace-nowrap transition-colors ${
                 tabActiva === tab.id
-                  ? 'border-indigo-600 text-indigo-700'
-                  : 'border-transparent text-slate-500 hover:text-slate-700'
+                  ? 'border-emerald-600 text-emerald-600 dark:text-emerald-400'
+                  : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
               }`}
             >
               {tab.label}
@@ -1127,57 +1091,13 @@ function PanelPrincipal({ clave, onLogout }) {
 // ─── Root Component ───────────────────────────────────────────────────────────
 
 export default function SuperAdmin() {
-  const [autenticado, setAutenticado] = useState(false)
-  const [clave, setClave] = useState('')
-  const [verificando, setVerificando] = useState(true)
+  const { usuario, logout } = useAuth()
+  const navigate = useNavigate()
 
-  // On mount: check stored key
-  useEffect(() => {
-    const stored = localStorage.getItem('x-superadmin-key')
-    if (!stored) {
-      setVerificando(false)
-      return
-    }
-    apiFetch('/superadmin/empresas', stored)
-      .then((res) => {
-        if (res.ok) {
-          setClave(stored)
-          setAutenticado(true)
-        } else {
-          localStorage.removeItem('x-superadmin-key')
-        }
-      })
-      .catch(() => {
-        // network error — clear stored key for safety
-        localStorage.removeItem('x-superadmin-key')
-      })
-      .finally(() => {
-        setVerificando(false)
-      })
-  }, [])
-
-  function handleLogin(nuevaClave) {
-    setClave(nuevaClave)
-    setAutenticado(true)
+  const handleLogout = () => {
+    logout()
+    navigate('/login', { replace: true })
   }
 
-  function handleLogout() {
-    localStorage.removeItem('x-superadmin-key')
-    setClave('')
-    setAutenticado(false)
-  }
-
-  if (verificando) {
-    return (
-      <div className="min-h-screen bg-slate-100 flex items-center justify-center">
-        <p className="text-slate-500 text-sm">Verificando sesion...</p>
-      </div>
-    )
-  }
-
-  if (!autenticado) {
-    return <PantallaLogin onLogin={handleLogin} />
-  }
-
-  return <PanelPrincipal clave={clave} onLogout={handleLogout} />
+  return <PanelPrincipal clave="" usuario={usuario} onLogout={handleLogout} />
 }

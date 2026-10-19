@@ -17,14 +17,23 @@ export function resolverUrlFotoProducto(fotoUrl, nombre = 'Producto') {
       .slice(0, 2)
       .map((s) => s[0]?.toUpperCase() || '')
       .join('') || 'PR'
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><rect width="200" height="200" rx="20" fill="#EFF6FF"/><text x="100" y="112" text-anchor="middle" font-family="system-ui,sans-serif" font-size="48" font-weight="700" fill="#1D4ED8">${ini}</text></svg>`
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><rect width="200" height="200" rx="16" fill="#F1F5F9"/><text x="100" y="112" text-anchor="middle" font-family="system-ui,-apple-system,sans-serif" font-size="44" font-weight="600" fill="#64748B">${ini}</text></svg>`
     return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`
   }
-  if (fotoUrl.startsWith('data:image/') || fotoUrl.startsWith('http://') || fotoUrl.startsWith('https://') || fotoUrl.startsWith('blob:')) {
+  if (fotoUrl.startsWith('data:image/') || fotoUrl.startsWith('blob:')) {
     return fotoUrl
   }
-  const hostBase = BASE.endsWith('/api') ? BASE.slice(0, -4) : BASE
-  return `${hostBase}${fotoUrl}`
+  let finalUrl = fotoUrl
+  if (!finalUrl.startsWith('http://') && !finalUrl.startsWith('https://')) {
+    const hostBase = BASE.endsWith('/api') ? BASE.slice(0, -4) : BASE
+    finalUrl = `${hostBase}${finalUrl.startsWith('/') ? '' : '/'}${finalUrl}`
+  }
+  const token = authService.getToken()
+  if (token && finalUrl.includes('/api/imagenes/') && !finalUrl.includes('token=')) {
+    const sep = finalUrl.includes('?') ? '&' : '?'
+    finalUrl = `${finalUrl}${sep}token=${encodeURIComponent(token)}`
+  }
+  return finalUrl
 }
 
 export function useProductos() {

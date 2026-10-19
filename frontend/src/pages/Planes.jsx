@@ -73,8 +73,8 @@ export default function Planes() {
 
   if (cargando) {
     return (
-      <div className="min-h-[60vh] flex flex-col items-center justify-center text-slate-500">
-        <Loader2 size={32} className="animate-spin text-violet-600 mb-3" />
+      <div className="min-h-[60vh] flex flex-col items-center justify-center text-slate-500 dark:text-slate-400">
+        <Loader2 size={32} className="animate-spin text-slate-900 dark:text-white mb-3" />
         <p className="text-sm font-medium">Cargando planes y uso de tu tienda...</p>
       </div>
     )
@@ -91,28 +91,28 @@ export default function Planes() {
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
       {/* Encabezado y Uso Actual */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-violet-50 text-violet-700 text-xs font-bold uppercase tracking-wider">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold uppercase tracking-wider">
               <Sparkles size={14} /> Suscripción SaaS Multi-Tienda
             </span>
-            <h1 className="text-2xl font-extrabold text-slate-900 mt-2">
+            <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white mt-2">
               Planes Comerciales Configurables
             </h1>
-            <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
               Cambia de plan en cualquier momento sin perder productos, ventas ni historial financiero.
             </p>
           </div>
 
-          <div className="bg-slate-100 p-1 rounded-xl inline-flex items-center self-start">
+          <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-xl inline-flex items-center self-start">
             <button
               type="button"
               onClick={() => setPeriodoFacturacion('mensual')}
               className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${
                 periodoFacturacion === 'mensual'
-                  ? 'bg-white text-violet-700 shadow-sm'
-                  : 'text-slate-600'
+                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
+                  : 'text-slate-600 dark:text-slate-400'
               }`}
             >
               Mensual
@@ -122,12 +122,12 @@ export default function Planes() {
               onClick={() => setPeriodoFacturacion('anual')}
               className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
                 periodoFacturacion === 'anual'
-                  ? 'bg-white text-violet-700 shadow-sm'
-                  : 'text-slate-600'
+                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
+                  : 'text-slate-600 dark:text-slate-400'
               }`}
             >
               Anual
-              <span className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full text-[10px]">
+              <span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-full text-[10px]">
                 -15%
               </span>
             </button>
@@ -135,18 +135,18 @@ export default function Planes() {
         </div>
 
         {/* Medidores de consumo frente a límites del plan actual */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-100">
-          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100">
-            <div className="flex justify-between text-xs font-semibold text-slate-700 mb-1">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+          <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+            <div className="flex justify-between text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
               <span>Productos en catálogo</span>
               <span>
                 {uso.productos_activos} /{' '}
                 {limites.max_productos >= 99999 ? 'Ilimitados' : limites.max_productos || 50}
               </span>
             </div>
-            <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+            <div className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
               <div
-                className="h-full bg-violet-600 rounded-full"
+                className="h-full bg-slate-900 dark:bg-white rounded-full"
                 style={{
                   width: `${Math.min(
                     100,
@@ -157,16 +157,16 @@ export default function Planes() {
             </div>
           </div>
 
-          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100">
-            <div className="flex justify-between text-xs font-semibold text-slate-700 mb-1">
+          <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+            <div className="flex justify-between text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
               <span>Usuarios / Cajeros activos</span>
               <span>
                 {uso.usuarios_activos} / {limites.max_usuarios || 2}
               </span>
             </div>
-            <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+            <div className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
               <div
-                className="h-full bg-emerald-600 rounded-full"
+                className="h-full bg-emerald-500 rounded-full"
                 style={{
                   width: `${Math.min(
                     100,
@@ -177,8 +177,8 @@ export default function Planes() {
             </div>
           </div>
 
-          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100">
-            <div className="flex justify-between text-xs font-semibold text-slate-700 mb-1">
+          <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+            <div className="flex justify-between text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
               <span>Ventas registradas este mes</span>
               <span>
                 {uso.ventas_mes_actual} /{' '}
@@ -187,7 +187,7 @@ export default function Planes() {
                   : fmt(limites.max_ventas_mes || 500)}
               </span>
             </div>
-            <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+            <div className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
               <div
                 className="h-full bg-amber-500 rounded-full"
                 style={{
@@ -206,8 +206,8 @@ export default function Planes() {
         <div
           className={`p-4 rounded-xl text-sm font-medium border ${
             mensaje.tipo === 'ok'
-              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-              : 'bg-red-50 text-red-700 border-red-200'
+              ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30'
+              : 'bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/30'
           }`}
         >
           {mensaje.texto}
@@ -229,10 +229,10 @@ export default function Planes() {
               key={plan.codigo}
               className={`rounded-2xl p-6 flex flex-col justify-between border transition-all ${
                 plan.codigo === 'pro'
-                  ? 'bg-slate-900 text-white border-violet-500 shadow-lg'
+                  ? 'bg-slate-950 dark:bg-slate-900 text-white border-slate-700 shadow-xl ring-1 ring-slate-800'
                   : plan.codigo === 'standard'
-                  ? 'bg-white text-slate-900 border-violet-300 shadow-md ring-1 ring-violet-200'
-                  : 'bg-white text-slate-900 border-slate-200 shadow-sm'
+                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white border-slate-300 dark:border-slate-700 shadow-md ring-1 ring-slate-200 dark:ring-slate-800'
+                  : 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white border-slate-200 dark:border-slate-800 shadow-sm'
               }`}
             >
               <div className="space-y-4">
@@ -240,16 +240,16 @@ export default function Planes() {
                   <span
                     className={`text-xs font-extrabold uppercase tracking-wider px-2.5 py-1 rounded-full ${
                       plan.codigo === 'pro'
-                        ? 'bg-violet-500/20 text-violet-300'
+                        ? 'bg-slate-800 text-slate-300'
                         : plan.codigo === 'standard'
-                        ? 'bg-violet-100 text-violet-700'
-                        : 'bg-slate-100 text-slate-600'
+                        ? 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
                     }`}
                   >
                     {plan.codigo === 'basic' ? 'Gratis' : plan.codigo.toUpperCase()}
                   </span>
                   {esActual && (
-                    <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-500 border border-emerald-500/30">
+                    <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
                       Plan Actual
                     </span>
                   )}
@@ -259,7 +259,7 @@ export default function Planes() {
                   <h2 className="text-xl font-extrabold">{plan.nombre}</h2>
                   <p
                     className={`text-xs mt-1 ${
-                      plan.codigo === 'pro' ? 'text-slate-300' : 'text-slate-500'
+                      plan.codigo === 'pro' ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400'
                     }`}
                   >
                     {plan.descripcion}
@@ -271,7 +271,7 @@ export default function Planes() {
                     <span className="text-3xl font-extrabold">${fmt(precioMostrar)}</span>
                     <span
                       className={`text-xs ${
-                        plan.codigo === 'pro' ? 'text-slate-400' : 'text-slate-500'
+                        plan.codigo === 'pro' ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400'
                       }`}
                     >
                       COP / mes
@@ -279,7 +279,7 @@ export default function Planes() {
                   </div>
                 </div>
 
-                <ul className="space-y-2.5 pt-3 border-t border-slate-200/20 text-xs">
+                <ul className="space-y-2.5 pt-3 border-t border-slate-200/20 dark:border-slate-800 text-xs">
                   <li className="flex items-center gap-2">
                     <Check size={15} className="text-emerald-500 shrink-0" />
                     <span>
@@ -312,7 +312,7 @@ export default function Planes() {
                   </li>
                   {plan.tiene_simulador && (
                     <li className="flex items-center gap-2">
-                      <Layers size={15} className="text-violet-500 shrink-0" />
+                      <Layers size={15} className="text-slate-400 shrink-0" />
                       <span>Simulador Comercial y Exportación Excel</span>
                     </li>
                   )}
@@ -338,10 +338,12 @@ export default function Planes() {
                   onClick={() => cambiarPlan(plan.codigo)}
                   className={`w-full py-3 px-4 rounded-xl text-xs font-extrabold transition-all min-h-[44px] ${
                     esActual
-                      ? 'bg-slate-200/20 text-slate-400 cursor-default border border-slate-300/30'
+                      ? 'bg-slate-200/20 text-slate-400 dark:text-slate-500 cursor-default border border-slate-300/30 dark:border-slate-700/50'
+                      : plan.codigo === 'pro'
+                      ? 'bg-white hover:bg-slate-100 text-slate-900 shadow-sm'
                       : esDestacado
-                      ? 'bg-violet-600 hover:bg-violet-500 text-white shadow-sm'
-                      : 'bg-slate-900 hover:bg-slate-800 text-white'
+                      ? 'bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 shadow-sm'
+                      : 'bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900'
                   }`}
                 >
                   {esActual

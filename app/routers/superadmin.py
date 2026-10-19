@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app import models
 from app.database import get_db
+from app.dependencies import get_current_user
 from app.schemas.soporte import (
     ActualizarEstado,
     ActualizarPlan,
@@ -40,17 +41,43 @@ class ActualizarConfigPlanRequest(BaseModel):
     soporte_prioritario: Optional[bool] = None
 
 
-def _check_superadmin(x_superadmin_key: str = Header(default=None, alias="x-superadmin-key")):
+def _check_superadmin(
+    authorization: Optional[str] = Header(default=None),
+    x_superadmin_key: Optional[str] = Header(default=None, alias="x-superadmin-key"),
+    db: Session = Depends(get_db),
+):
     """
-    Verifica la clave de superadmin en cada request.
-    Se ejecuta en cada llamada para que monkeypatch.setenv funcione en tests.
+    Permite acceso de superadmin mediante:
+    1. Sesión JWT normal autenticada con usuario.es_superadmin == True (Login único de Tiendapp 2.0).
+    2. Cabecera x-superadmin-key (para scripts de automatización y tests backend).
+    Si ninguna credencial válida es provista, retorna 403 Forbidden.
     """
     key = os.getenv("SUPERADMIN_KEY")
-    if not key or x_superadmin_key != key:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Clave de superadmin inválida",
-        )
+    if x_superadmin_key and key and x_superadmin_key == key:
+        return None
+
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split("Bearer ", 1)[1].strip()
+        try:
+            from app.services.auth_service import ALGORITHM, SECRET_KEY
+            import jwt
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            user_id = payload.get("sub")
+            if user_id:
+                u_uuid = UUID(user_id) if not isinstance(user_id, UUID) else user_id
+                user = db.query(models.Usuario).filter(
+                    models.Usuario.id == u_uuid,
+                    models.Usuario.is_active.is_(True),
+                ).first()
+                if user and getattr(user, "es_superadmin", False):
+                    return user
+        except Exception:
+            pass
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Acceso restringido al equipo de Tiendapp",
+    )
 
 
 @router.get("/metricas-globales")

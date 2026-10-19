@@ -31,7 +31,7 @@ export default function Simulador() {
     setProductoSeleccionadoId(id)
     const p = productos.find((item) => item.id === id)
     if (p) {
-      const costo = Number(p.costo_unitario || p.precio_venta * 0.7 || 1000)
+      const costo = Number(p.precio_costo || p.costo_unitario || p.precio_venta * 0.7 || 1000)
       const venta = Number(p.precio_venta || 1500)
       setPrecioCompra(costo)
       setPrecioVenta(venta)
@@ -63,7 +63,7 @@ export default function Simulador() {
         return
       }
     } catch {
-      // Cálculo local idéntico si está sin conexión
+      // Cálculo local si está offline
     }
 
     // Cálculo local de respaldo (Offline-first)
@@ -77,43 +77,33 @@ export default function Simulador() {
     const peUnidades = margenUnit > 0 ? Math.ceil(payload.gastos_fijos / margenUnit) : null
     const pePesos = peUnidades !== null ? peUnidades * pFinal : null
 
-    const margenBaseUnit =
-      payload.precio_venta_base - payload.costo_compra_base - payload.gasto_variable_unitario
-    const utilidadNetaBase =
-      margenBaseUnit * payload.volumen_base - payload.gastos_fijos
+    const margenBaseUnit = payload.precio_venta_base - payload.costo_compra_base
+    const utilidadNetaBase = margenBaseUnit * payload.volumen_base - payload.gastos_fijos
+    const difUtilidad = utilidadNeta - utilidadNetaBase
 
     setResultado({
       escenario_simulado: {
-        precio_venta_efectivo: Math.round(pFinal),
-        costo_total_unitario: Math.round(cTotalUnit),
-        margen_unitario: Math.round(margenUnit),
-        margen_porcentual: Number(margenPct.toFixed(2)),
-        ingresos_estimados: Math.round(ingresos),
-        utilidad_bruta_estimada: Math.round(utilidadBruta),
-        utilidad_neta_estimada: Math.round(utilidadNeta),
+        precio_venta_efectivo: pFinal,
+        margen_unitario: margenUnit,
+        margen_porcentual: Number(margenPct.toFixed(1)),
+        ingresos_estimados: ingresos,
+        utilidad_bruta_estimada: utilidadBruta,
+        utilidad_neta_estimada: utilidadNeta,
         punto_equilibrio_unidades: peUnidades,
-        punto_equilibrio_pesos: pePesos ? Math.round(pePesos) : null,
-        es_rentable: utilidadNeta > 0 && margenUnit > 0,
+        punto_equilibrio_pesos: pePesos,
       },
       comparacion_escenario_base: {
-        utilidad_neta_base: Math.round(utilidadNetaBase),
-        diferencia_utilidad_neta: Math.round(utilidadNeta - utilidadNetaBase),
+        utilidad_neta_base: utilidadNetaBase,
+        diferencia_utilidad_neta: difUtilidad,
         recomendacion:
-          utilidadNeta >= utilidadNetaBase
-            ? 'El escenario simulado mejora la utilidad neta frente al escenario base.'
-            : 'Atención: El escenario simulado reduce la utilidad frente al escenario actual.',
-      },
-      formulas_documentadas: {
-        precio_efectivo: 'P_efectivo = P_venta * (1 - Descuento/100)',
-        margen_unitario: 'M_u = P_efectivo - (Costo_compra + Gasto_variable_unitario)',
-        margen_porcentual: 'M_% = (M_u / P_efectivo) * 100',
-        utilidad_neta: 'U_neta = (M_u * Volumen) - Gastos_fijos',
-        punto_equilibrio: 'PE_unidades = ceil(Gastos_fijos / M_u)',
+          difUtilidad >= 0
+            ? 'El escenario proyecta mayor ganancia neta que el punto de partida.'
+            : 'Atención: esta combinación reduce tu utilidad neta en comparación con la base actual.',
       },
     })
   }, [
-    precioVenta,
     precioCompra,
+    precioVenta,
     volumenUnidades,
     gastosFijos,
     gastoVariableUnitario,
@@ -150,44 +140,44 @@ export default function Simulador() {
     <div className="space-y-6 max-w-6xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <Calculator className="text-violet-600" size={24} />
-            Simulador Comercial de Precios, Costos y Punto de Equilibrio
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+            <Calculator size={24} className="text-slate-900 dark:text-slate-100" />
+            Simulador de precios y márgenes
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-            Evalúa el impacto de descuentos, alzas de proveedor o metas de volumen antes de cambiar tus precios
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+            Evalúa el impacto de descuentos, costos y punto de equilibrio antes de cambiar precios
           </p>
         </div>
 
         <button
           type="button"
           onClick={guardarEscenarioComparativo}
-          className="bg-violet-600 hover:bg-violet-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs sm:text-sm flex items-center gap-1.5 min-h-[44px] self-start"
+          className="bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white text-white font-semibold px-4 py-2.5 rounded-xl text-xs sm:text-sm flex items-center gap-1.5 min-h-[44px] self-start transition-colors"
         >
-          <PlusCircle size={16} /> Guardar Escenario para Comparar
+          <PlusCircle size={15} /> Guardar escenario
         </button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Panel de Controles Interactivos */}
-        <div className="lg:col-span-5 bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4">
-          <h2 className="font-bold text-base text-slate-900">
-            Variables del Escenario
+        {/* Panel de Controles */}
+        <div className="lg:col-span-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-xs space-y-4">
+          <h2 className="font-semibold text-base text-slate-900 dark:text-slate-100">
+            Variables de proyección
           </h2>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1">
-              Cargar producto del catálogo (opcional)
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              Cargar producto de tu catálogo (opcional)
             </label>
             <select
               value={productoSeleccionadoId}
               onChange={(e) => handleSelectProducto(e.target.value)}
-              className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm bg-slate-50"
+              className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none"
             >
-              <option value="">— Simulación libre / Personalizada —</option>
+              <option value="">— Simulación libre / personalizada —</option>
               {productos.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.nombre} (Venta: ${fmt(p.precio_venta)} | Costo: ${fmt(p.costo_unitario)})
+                  {p.nombre} (Venta: ${fmt(p.precio_venta)} | Costo: ${fmt(p.precio_costo)})
                 </option>
               ))}
             </select>
@@ -195,47 +185,47 @@ export default function Simulador() {
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Costo de Compra Unit. ($)
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Costo de compra ($)
               </label>
               <input
                 type="number"
                 min="0"
                 value={precioCompra}
                 onChange={(e) => setPrecioCompra(e.target.value)}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold"
+                className="w-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none"
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Precio de Venta Propuesto ($)
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Precio de venta propuesto ($)
               </label>
               <input
                 type="number"
                 min="0"
                 value={precioVenta}
                 onChange={(e) => setPrecioVenta(e.target.value)}
-                className="w-full border border-violet-300 bg-violet-50/30 rounded-xl px-3 py-2 text-sm font-bold text-violet-900"
+                className="w-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl px-3 py-2 text-xs font-bold focus:outline-none"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Volumen Estimado (Unidades)
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Volumen estimado (uds)
               </label>
               <input
                 type="number"
                 min="1"
                 value={volumenUnidades}
                 onChange={(e) => setVolumenUnidades(e.target.value)}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold"
+                className="w-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none"
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Promoción / Descuento (%)
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Descuento / Promo (%)
               </label>
               <input
                 type="number"
@@ -243,197 +233,193 @@ export default function Simulador() {
                 max="95"
                 value={descuentoPct}
                 onChange={(e) => setDescuentoPct(e.target.value)}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold"
+                className="w-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Gastos Fijos Asignados ($)
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Gastos fijos asignados ($)
               </label>
               <input
                 type="number"
                 min="0"
                 value={gastosFijos}
                 onChange={(e) => setGastosFijos(e.target.value)}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm"
+                className="w-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl px-3 py-2 text-xs focus:outline-none"
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Gasto Variable Unitario ($)
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Gasto variable unitario ($)
               </label>
               <input
                 type="number"
                 min="0"
                 value={gastoVariableUnitario}
                 onChange={(e) => setGastoVariableUnitario(e.target.value)}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm"
+                className="w-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl px-3 py-2 text-xs focus:outline-none"
               />
             </div>
           </div>
 
-          <div className="pt-3 border-t border-slate-100 space-y-2">
-            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-              Escenario Base Actual (Para Comparación)
+          <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
+            <p className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+              Escenario base actual (para contraste)
             </p>
             <div className="grid grid-cols-3 gap-2">
               <div>
-                <span className="text-[11px] text-slate-500 block">Precio Actual</span>
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 block">Precio actual</span>
                 <input
                   type="number"
                   value={precioVentaBase}
                   onChange={(e) => setPrecioVentaBase(e.target.value)}
-                  className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-semibold"
+                  className="w-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-lg px-2 py-1 text-xs focus:outline-none"
                 />
               </div>
               <div>
-                <span className="text-[11px] text-slate-500 block">Costo Actual</span>
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 block">Costo actual</span>
                 <input
                   type="number"
                   value={costoCompraBase}
                   onChange={(e) => setCostoCompraBase(e.target.value)}
-                  className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-semibold"
+                  className="w-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-lg px-2 py-1 text-xs focus:outline-none"
                 />
               </div>
               <div>
-                <span className="text-[11px] text-slate-500 block">Volumen Actual</span>
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 block">Volumen actual</span>
                 <input
                   type="number"
                   value={volumenBase}
                   onChange={(e) => setVolumenBase(e.target.value)}
-                  className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-semibold"
+                  className="w-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-lg px-2 py-1 text-xs focus:outline-none"
                 />
               </div>
             </div>
           </div>
         </div>
 
-        {/* Panel de Resultados e Impacto */}
+        {/* Panel de Resultados */}
         <div className="lg:col-span-7 space-y-4">
           {sim && (
             <>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3.5">
-                <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
-                  <span className="text-[11px] font-bold text-slate-400 uppercase block">
-                    Margen Unitario
+                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-xs">
+                  <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase block">
+                    Margen unitario
                   </span>
                   <p
-                    className={`text-2xl font-extrabold mt-1 ${
-                      sim.margen_unitario > 0 ? 'text-emerald-600' : 'text-red-600'
+                    className={`text-2xl font-bold mt-1 ${
+                      sim.margen_unitario > 0
+                        ? 'text-emerald-600 dark:text-emerald-400'
+                        : 'text-rose-600 dark:text-rose-400'
                     }`}
                   >
                     ${fmt(sim.margen_unitario)}
                   </p>
-                  <span className="text-xs text-slate-500 mt-1 block">
+                  <span className="text-xs text-slate-500 dark:text-slate-400 mt-1 block">
                     Precio final: ${fmt(sim.precio_venta_efectivo)}
                   </span>
                 </div>
 
-                <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
-                  <span className="text-[11px] font-bold text-slate-400 uppercase block">
-                    Margen Porcentual
+                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-xs">
+                  <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase block">
+                    Margen porcentual
                   </span>
-                  <p className="text-2xl font-extrabold text-violet-700 mt-1">
+                  <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-1">
                     {sim.margen_porcentual}%
                   </p>
-                  <span className="text-xs text-slate-500 mt-1 block">
+                  <span className="text-xs text-slate-500 dark:text-slate-400 mt-1 block">
                     Sobre precio efectivo
                   </span>
                 </div>
 
-                <div
-                  className={`rounded-2xl p-4 shadow-sm col-span-2 sm:col-span-1 border ${
-                    sim.utilidad_neta_estimada >= 0
-                      ? 'bg-emerald-600 text-white border-emerald-600'
-                      : 'bg-red-600 text-white border-red-600'
-                  }`}
-                >
-                  <span className="text-[11px] font-bold uppercase opacity-80 block">
-                    Utilidad Neta Estimada
+                <div className="bg-slate-900 dark:bg-slate-800 text-white rounded-2xl p-4 shadow-xs col-span-2 sm:col-span-1 border border-slate-800 dark:border-slate-700">
+                  <span className="text-[11px] font-semibold uppercase text-slate-400 block">
+                    Utilidad neta estimada
                   </span>
-                  <p className="text-2xl font-extrabold mt-1">
+                  <p className="text-2xl font-bold mt-1">
                     ${fmt(sim.utilidad_neta_estimada)}
                   </p>
-                  <span className="text-xs opacity-90 mt-1 block">
+                  <span className="text-xs text-slate-400 mt-1 block">
                     Ingresos: ${fmt(sim.ingresos_estimados)}
                   </span>
                 </div>
               </div>
 
-              {/* Punto de Equilibrio y Comparación contra Escenario Base */}
+              {/* Punto de Equilibrio y Comparación */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-2">
-                  <div className="flex items-center gap-2 text-violet-700 font-bold text-sm">
-                    <Scale size={18} />
-                    <span>Punto de Equilibrio</span>
+                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-xs space-y-2">
+                  <div className="flex items-center gap-2 text-slate-900 dark:text-slate-100 font-semibold text-sm">
+                    <Scale size={16} />
+                    <span>Punto de equilibrio</span>
                   </div>
                   {sim.punto_equilibrio_unidades !== null ? (
                     <>
-                      <p className="text-2xl font-extrabold text-slate-900">
+                      <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">
                         {fmt(sim.punto_equilibrio_unidades)} unidades
                       </p>
-                      <p className="text-xs text-slate-500">
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
                         Debes vender al menos{' '}
-                        <strong>${fmt(sim.punto_equilibrio_pesos)}</strong> para cubrir los{' '}
-                        <strong>${fmt(gastosFijos)}</strong> de gastos fijos.
+                        <strong className="text-slate-800 dark:text-slate-200">
+                          ${fmt(sim.punto_equilibrio_pesos)}
+                        </strong>{' '}
+                        para cubrir los ${fmt(gastosFijos)} de gastos fijos.
                       </p>
                     </>
                   ) : (
-                    <p className="text-xs font-semibold text-red-600">
-                      ⚠️ Con este precio vendes a pérdida unitaria. No es posible alcanzar punto de equilibrio.
+                    <p className="text-xs font-semibold text-rose-600 dark:text-rose-400">
+                      Con este precio se genera pérdida unitaria. Imposible alcanzar punto de equilibrio.
                     </p>
                   )}
                 </div>
 
                 {comp && (
-                  <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-2">
-                    <div className="flex items-center gap-2 text-slate-800 font-bold text-sm">
-                      <TrendingUp size={18} className="text-emerald-600" />
-                      <span>Comparación vs Escenario Actual</span>
+                  <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-xs space-y-2">
+                    <div className="flex items-center gap-2 text-slate-900 dark:text-slate-100 font-semibold text-sm">
+                      <TrendingUp size={16} className="text-emerald-600 dark:text-emerald-400" />
+                      <span>Comparación vs actual</span>
                     </div>
                     <p
-                      className={`text-xl font-extrabold ${
+                      className={`text-xl font-bold ${
                         comp.diferencia_utilidad_neta >= 0
-                          ? 'text-emerald-600'
-                          : 'text-red-600'
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : 'text-rose-600 dark:text-rose-400'
                       }`}
                     >
                       {comp.diferencia_utilidad_neta >= 0 ? '+' : ''}$
-                      {fmt(comp.diferencia_utilidad_neta)} vs base ($
-                      {fmt(comp.utilidad_neta_base)})
+                      {fmt(comp.diferencia_utilidad_neta)} vs base (${fmt(comp.utilidad_neta_base)})
                     </p>
-                    <p className="text-xs text-slate-600">{comp.recomendacion}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{comp.recomendacion}</p>
                   </div>
                 )}
               </div>
 
-              {/* Tabla comparativa de escenarios guardados */}
+              {/* Escenarios guardados */}
               {escenariosGuardados.length > 0 && (
-                <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-3">
-                  <h3 className="font-bold text-sm text-slate-900">
-                    Comparación de Escenarios Guardados
+                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-xs space-y-3">
+                  <h3 className="font-semibold text-sm text-slate-900 dark:text-slate-100">
+                    Escenarios guardados
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {escenariosGuardados.map((e) => (
                       <div
                         key={e.id}
-                        className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1"
+                        className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 text-xs space-y-1"
                       >
-                        <p className="font-bold text-slate-900">{e.nombre}</p>
-                        <p className="text-slate-600">
-                          Precio: ${fmt(e.precio_venta_efectivo)} ({e.descuentoPct}% dcto) · Vol:{' '}
-                          {e.volumenUnidades} uds
+                        <p className="font-semibold text-slate-900 dark:text-slate-100">{e.nombre}</p>
+                        <p className="text-slate-500 dark:text-slate-400">
+                          Precio: ${fmt(e.precio_venta_efectivo)} ({e.descuentoPct}% dcto) · Vol: {e.volumenUnidades} uds
                         </p>
-                        <p className="font-bold text-violet-700">
-                          Margen: ${fmt(e.margen_unitario)} ({e.margen_porcentual}%) · Utilidad Neta:{' '}
+                        <p className="font-semibold text-slate-800 dark:text-slate-200">
+                          Margen: ${fmt(e.margen_unitario)} ({e.margen_porcentual}%) · Neta:{' '}
                           <span
                             className={
                               e.utilidad_neta_estimada >= 0
-                                ? 'text-emerald-600'
-                                : 'text-red-600'
+                                ? 'text-emerald-600 dark:text-emerald-400'
+                                : 'text-rose-600 dark:text-rose-400'
                             }
                           >
                             ${fmt(e.utilidad_neta_estimada)}
@@ -445,32 +431,27 @@ export default function Simulador() {
                 </div>
               )}
 
-              {/* Documentación de Fórmulas y Supuestos (Sección 12) */}
-              <div className="bg-slate-50 rounded-2xl border border-slate-200 p-4 text-xs text-slate-600 space-y-1.5">
-                <div className="flex items-center gap-1.5 font-bold text-slate-800">
-                  <BookOpen size={15} className="text-violet-600" />
-                  <span>Fórmulas Matemáticas y Supuestos del Simulador</span>
+              {/* Fórmulas y supuestos */}
+              <div className="bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 text-xs text-slate-600 dark:text-slate-400 space-y-1.5">
+                <div className="flex items-center gap-1.5 font-semibold text-slate-800 dark:text-slate-200">
+                  <BookOpen size={14} />
+                  <span>Fórmulas financieras aplicadas</span>
                 </div>
                 <ul className="list-disc list-inside space-y-1 text-[11px]">
                   <li>
-                    <strong>Precio Efectivo:</strong>{' '}
-                    <code>P_efectivo = P_venta × (1 − Descuento / 100)</code>
+                    <strong>Precio efectivo:</strong> <code>P_efectivo = P_venta × (1 − Descuento / 100)</code>
                   </li>
                   <li>
-                    <strong>Margen Unitario de Contribución:</strong>{' '}
-                    <code>M_u = P_efectivo − (Costo_compra + Gasto_variable_unitario)</code>
+                    <strong>Margen unitario:</strong> <code>M_u = P_efectivo − (Costo_compra + Gasto_variable)</code>
                   </li>
                   <li>
-                    <strong>Margen Porcentual Bruto:</strong>{' '}
-                    <code>M_% = (M_u / P_efectivo) × 100</code>
+                    <strong>Margen porcentual:</strong> <code>M_% = (M_u / P_efectivo) × 100</code>
                   </li>
                   <li>
-                    <strong>Utilidad Neta Estimada:</strong>{' '}
-                    <code>U_neta = (M_u × Volumen_unidades) − Gastos_fijos</code>
+                    <strong>Utilidad neta:</strong> <code>U_neta = (M_u × Volumen) − Gastos_fijos</code>
                   </li>
                   <li>
-                    <strong>Punto de Equilibrio (Unidades):</strong>{' '}
-                    <code>PE_u = ⌈Gastos_fijos / M_u⌉</code> (asumiendo costos fijos constantes en el período).
+                    <strong>Punto de equilibrio:</strong> <code>PE_u = ⌈Gastos_fijos / M_u⌉</code>
                   </li>
                 </ul>
               </div>

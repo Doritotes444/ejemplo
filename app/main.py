@@ -22,6 +22,7 @@ from app.routers import (
     comprobantes,
     planes,
     sync,
+    imagenes,
 )
 from app.core.security_middleware import SecurityHeadersMiddleware
 
@@ -92,6 +93,7 @@ for r in (
     comprobantes.router,
     planes.router,
     sync.router,
+    imagenes.router,
 ):
     app.include_router(r)
     app.include_router(r, prefix="/api")

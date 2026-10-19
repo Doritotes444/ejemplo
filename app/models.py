@@ -1,7 +1,7 @@
 import uuid
 import enum
 from sqlalchemy import (
-    Column, String, Numeric, Boolean, Date, Text, Integer,
+    Column, String, Numeric, Boolean, Date, Text, Integer, LargeBinary,
     DateTime, ForeignKey, Enum as SAEnum, Index, UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID
@@ -138,6 +138,9 @@ class Usuario(AuditMixin, Base):
     )
     nombre = Column(String(100), nullable=True)
     telefono_whatsapp = Column(String(20), nullable=True, unique=True)
+    # Operador de la plataforma Tiendapp. Solo se asigna desde servidor (script/BD),
+    # nunca desde un formulario público. Usa el mismo login que el resto de usuarios.
+    es_superadmin = Column(Boolean, nullable=False, default=False, server_default="0")
 
     empresa = relationship("Empresa", back_populates="usuarios")
     ventas  = relationship("Venta", back_populates="usuario", foreign_keys="Venta.usuario_id")
@@ -655,3 +658,43 @@ class AgentCommand(AuditMixin, Base):
 
     def __repr__(self) -> str:
         return f"<AgentCommand {self.command_id} [{self.status}]>"
+
+
+# ---------------------------------------------------------------------------
+# Biblioteca de imágenes de productos (deduplicada por hash y aislada por negocio)
+# ---------------------------------------------------------------------------
+
+class ImagenProducto(AuditMixin, Base):
+    """
+    Imagen reutilizable del catálogo de un negocio.
+
+    - `sha256` se calcula sobre la versión optimizada: si el mismo archivo se sube
+      dos veces dentro del mismo negocio, se reutiliza el registro existente.
+    - Se guarda la versión optimizada (≈640 px) y una miniatura (≈160 px). El original
+      del dispositivo nunca se sube: se comprime en el cliente antes de enviarse.
+    - Los productos la referencian por `Producto.foto_url = /api/imagenes/{id}/archivo`.
+      El conteo de referencias se calcula sobre esa columna, de modo que no se puede
+      borrar una imagen mientras algún producto la use.
+    - El acceso exige autenticación del mismo negocio (no hay URLs públicas).
+    """
+    __tablename__ = "imagenes_producto"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    empresa_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("empresas.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    sha256 = Column(String(64), nullable=False)
+    mime = Column(String(40), nullable=False, default="image/webp")
+    ancho = Column(Integer, nullable=True)
+    alto = Column(Integer, nullable=True)
+    bytes_optimizada = Column(Integer, nullable=False, default=0)
+    data_optimizada = Column(LargeBinary, nullable=False)
+    data_miniatura = Column(LargeBinary, nullable=False)
+    nombre = Column(String(120), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("empresa_id", "sha256", name="uq_imagen_empresa_sha256"),
+        Index("idx_imagenes_empresa", "empresa_id"),
+    )
