@@ -1,8 +1,13 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useAuth } from '../context/AuthContext'
+import { useCart } from '../context/CartContext'
+import { useProductos } from '../hooks/useProductos'
+import { useVentas } from '../hooks/useVentas'
 import authService from '../services/authService'
 import usuarioService from '../services/usuarioService'
 import { isAdmin, canExportReports } from '../utils/permissions'
+import EscanerModal from '../components/EscanerModal'
+import ModalProducto from '../components/ModalProducto'
 import {
   Clock,
   Calendar,
@@ -10,34 +15,48 @@ import {
   ChevronRight,
   ChevronDown,
   ChevronUp,
-  User,
-  Users,
   Filter,
   FileSpreadsheet,
   RefreshCw,
-  ShoppingBag,
   Loader2,
   CheckCircle2,
   AlertCircle,
+  Zap,
+  ScanBarcode,
+  Search,
+  Plus,
+  Minus,
+  Trash2,
+  Ban,
+  Star,
 } from 'lucide-react'
 
 const BASE = import.meta.env.VITE_API_URL || '/api'
 
 const TABS_HISTORICO = [
-  { id: 'hoy',       label: 'Hoy',      labelCorto: 'Hoy' },
-  { id: 'semana',    label: 'Esta Semana', labelCorto: 'Semana' },
+  { id: 'hoy', label: 'Hoy', labelCorto: 'Hoy' },
+  { id: 'semana', label: 'Esta Semana', labelCorto: 'Semana' },
   { id: 'historico', label: 'Histórico y Reportes', labelCorto: 'Histórico' },
 ]
 
-// Obtiene la fecha de hoy en formato YYYY-MM-DD según la zona horaria comercial America/Bogota
+const METODOS_PAGO = [
+  { id: 'Efectivo', label: '💵 Efectivo' },
+  { id: 'Nequi', label: '🟣 Nequi' },
+  { id: 'DaviPlata', label: '🔴 DaviPlata' },
+  { id: 'Transferencia', label: '🏦 Transf.' },
+  { id: 'Tarjeta', label: '💳 Tarjeta' },
+  { id: 'Fiado', label: '📒 Fiado' },
+]
+
+const BILLETES_RAPIDOS = [2000, 5000, 10000, 20000, 50000, 100000]
+
 function getHoyColombia() {
-  const parts = new Intl.DateTimeFormat('en-CA', {
+  return new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Bogota',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
   }).format(new Date())
-  return parts
 }
 
 function sumarDias(fechaStr, dias) {
@@ -73,11 +92,11 @@ function formatearHoraBogota(isoString) {
   }
 }
 
-const fmt = (n) => Number(n).toLocaleString('es-CO', { maximumFractionDigits: 0 })
+const fmt = (n) => Number(n || 0).toLocaleString('es-CO', { maximumFractionDigits: 0 })
 
 function ExcelExport({ empresaId }) {
   const [descargando, setDescargando] = useState(false)
-  const [estado, setEstado] = useState(null) // 'ok' | 'error' | null
+  const [estado, setEstado] = useState(null)
 
   const descargar = async () => {
     setDescargando(true)
@@ -151,25 +170,30 @@ function ExcelExport({ empresaId }) {
   )
 }
 
-/**
- * Item individual del Timeline de Actividad del Día con Acordeón desplegable
- */
-function VentaTimelineItem({ venta }) {
+function VentaTimelineItem({ venta, onAnularClick }) {
   const [expandido, setExpandido] = useState(false)
   const hora = formatearHoraBogota(venta.fecha_venta)
   const vendedor = venta.vendedor_nombre_snapshot || 'Vendedor'
-  const codigo = venta.id ? `#${venta.id.split('-')[0]}` : ''
+  const codigo = venta.id ? `#${String(venta.id).split('-')[0]}` : ''
+  const esAnulada = venta.estado === 'ANULADA'
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 shadow-sm transition-all hover:border-slate-300 overflow-hidden">
-      {/* Fila principal compacta */}
+    <div
+      className={`bg-white rounded-xl border shadow-sm transition-all overflow-hidden ${
+        esAnulada ? 'border-red-200 bg-red-50/20 opacity-80' : 'border-slate-200 hover:border-slate-300'
+      }`}
+    >
       <div
         onClick={() => setExpandido(!expandido)}
         className="p-4 flex items-center justify-between cursor-pointer select-none hover:bg-slate-50/70 transition-colors"
       >
         <div className="flex items-center gap-3 min-w-0">
-          <div className="w-10 h-10 rounded-xl bg-violet-50 text-violet-700 flex items-center justify-center shrink-0">
-            <Clock size={18} />
+          <div
+            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+              esAnulada ? 'bg-red-100 text-red-600' : 'bg-violet-50 text-violet-700'
+            }`}
+          >
+            {esAnulada ? <Ban size={18} /> : <Clock size={18} />}
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
@@ -178,15 +202,28 @@ function VentaTimelineItem({ venta }) {
               <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-slate-100 text-slate-700 truncate max-w-[140px]">
                 👤 {vendedor}
               </span>
+              <span className="text-xs px-2 py-0.5 rounded-full font-semibold bg-violet-50 text-violet-700">
+                {venta.metodo_pago || 'Efectivo'}
+              </span>
+              {esAnulada && (
+                <span className="text-[11px] px-2 py-0.5 rounded-full font-bold bg-red-100 text-red-700">
+                  ANULADA
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
               {venta.detalles?.length || 0} {venta.detalles?.length === 1 ? 'producto' : 'productos'}
+              {venta.cliente_nombre ? ` · Cliente: ${venta.cliente_nombre}` : ''}
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-3 shrink-0">
-          <span className="font-bold text-base sm:text-lg text-violet-700">
+          <span
+            className={`font-bold text-base sm:text-lg ${
+              esAnulada ? 'line-through text-red-500' : 'text-violet-700'
+            }`}
+          >
             ${fmt(venta.total)}
           </span>
           <button
@@ -199,12 +236,32 @@ function VentaTimelineItem({ venta }) {
         </div>
       </div>
 
-      {/* Detalle expandible (Acordeón) */}
       {expandido && (
-        <div className="border-t border-slate-100 bg-slate-50/50 p-4 animate-in fade-in-50 duration-150">
-          <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2.5">
-            Detalle de la Venta
-          </h4>
+        <div className="border-t border-slate-100 bg-slate-50/50 p-4 space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+              Detalle de la Venta
+            </h4>
+            {!esAnulada && onAnularClick && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onAnularClick(venta)
+                }}
+                className="text-xs font-semibold text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"
+              >
+                <Ban size={14} /> Anular venta (auditable)
+              </button>
+            )}
+          </div>
+
+          {esAnulada && venta.motivo_anulacion && (
+            <div className="bg-red-50 border border-red-200 text-red-700 text-xs p-2.5 rounded-lg">
+              <strong>Motivo de anulación:</strong> {venta.motivo_anulacion}
+            </div>
+          )}
+
           <div className="space-y-2">
             {venta.detalles?.map((d) => (
               <div
@@ -237,25 +294,190 @@ function VentaTimelineItem({ venta }) {
 export default function Ventas() {
   const { usuario } = useAuth()
   const esAdmin = isAdmin(usuario)
+  const {
+    carrito,
+    agregar,
+    restar,
+    setCantidad,
+    eliminar,
+    vaciar,
+    total,
+  } = useCart()
+  const {
+    productos,
+    cargar: recargarProductos,
+    crear: crearProducto,
+    buscarPorCodigo,
+  } = useProductos()
+  const { registrar, anular } = useVentas()
 
-  // Modo de vista para Admin: 'actividad' (timeline del día) | 'historico' (períodos)
-  const [modoVista, setModoVista] = useState(esAdmin ? 'actividad' : 'historico')
+  // Pestaña activa: 'pos' (Venta rápida < 3s) | 'actividad' | 'historico'
+  const [modoVista, setModoVista] = useState('pos')
+
+  // Estado Caja Rápida (< 3s POS)
+  const [busquedaPos, setBusquedaPos] = useState('')
+  const [soloFrecuentes, setSoloFrecuentes] = useState(false)
+  const [metodoPago, setMetodoPago] = useState('Efectivo')
+  const [montoRecibido, setMontoRecibido] = useState('')
+  const [clienteNombre, setClienteNombre] = useState('')
+  const [procesandoVenta, setProcesandoVenta] = useState(false)
+  const [feedbackPos, setFeedbackPos] = useState(null)
+  const [escanerAbierto, setEscanerAbierto] = useState(false)
+  const [codigoNoEncontrado, setCodigoNoEncontrado] = useState(null)
+  const [modalProvisionalAbierto, setModalProvisionalAbierto] = useState(false)
+  const inputCodigoRef = useRef(null)
+
+  // Modal de Anulación Auditable
+  const [ventaAAnular, setVentaAAnular] = useState(null)
+  const [motivoAnulacion, setMotivoAnulacion] = useState('')
+  const [anulando, setAnulando] = useState(false)
 
   // Estado para "Actividad del Día"
   const [fechaActividad, setFechaActividad] = useState(getHoyColombia)
-  const [cajeroFiltro, setCajeroFiltro] = useState('') // '' = todos
+  const [cajeroFiltro, setCajeroFiltro] = useState('')
   const [cajerosDisponibles, setCajerosDisponibles] = useState([])
   const [ventasActividad, setVentasActividad] = useState([])
   const [cargandoActividad, setCargandoActividad] = useState(false)
   const [errorActividad, setErrorActividad] = useState(null)
 
-  // Estado para "Histórico" (o cajeros)
+  // Estado para "Histórico"
   const [tabHistorico, setTabHistorico] = useState('hoy')
   const [ventasHistorico, setVentasHistorico] = useState([])
   const [cargandoHistorico, setCargandoHistorico] = useState(false)
   const [errorHistorico, setErrorHistorico] = useState(null)
 
-  // 1. Cargar cajeros disponibles para el selector de filtro (solo Admin)
+  // Filtrado de productos para la cuadrícula rápida
+  const productosMostrador = useMemo(() => {
+    const q = busquedaPos.trim().toLowerCase()
+    let lista = productos.filter((p) => p.is_active !== false)
+    if (soloFrecuentes) {
+      const frec = lista.filter((p) => p.es_frecuente)
+      if (frec.length > 0) lista = frec
+    }
+    if (!q) {
+      // Ordenar frecuentes primero
+      return [...lista].sort((a, b) => Number(Boolean(b.es_frecuente)) - Number(Boolean(a.es_frecuente)))
+    }
+    return lista.filter(
+      (p) =>
+        p.nombre?.toLowerCase().includes(q) ||
+        p.codigo_barras?.toLowerCase().includes(q) ||
+        p.categoria?.toLowerCase().includes(q)
+    )
+  }, [productos, busquedaPos, soloFrecuentes])
+
+  // Procesar lectura de código de barras (USB o cámara)
+  const procesarCodigoEscaneado = useCallback(
+    async (codigoRaw) => {
+      const codigo = String(codigoRaw || '').trim()
+      if (!codigo) return
+      setCodigoNoEncontrado(null)
+      const prod = await buscarPorCodigo(codigo)
+      if (prod) {
+        if (prod.cantidad_actual <= 0) {
+          setFeedbackPos({
+            tipo: 'error',
+            texto: `⚠️ "${prod.nombre}" está agotado en inventario.`,
+          })
+          return
+        }
+        agregar(prod)
+        setBusquedaPos('')
+        setFeedbackPos({
+          tipo: 'ok',
+          texto: `⚡ Añadido: ${prod.nombre} ($${fmt(prod.precio_venta)})`,
+        })
+      } else {
+        setCodigoNoEncontrado(codigo)
+      }
+    },
+    [buscarPorCodigo, agregar]
+  )
+
+  const handleKeyDownScanner = (e) => {
+    if (e.key === 'Enter' && busquedaPos.trim()) {
+      e.preventDefault()
+      // Si hay coincidencia exacta de código de barras o un único resultado, añadir inmediato
+      const exacto = productos.find(
+        (p) =>
+          p.codigo_barras &&
+          p.codigo_barras.trim().toLowerCase() === busquedaPos.trim().toLowerCase()
+      )
+      if (exacto) {
+        procesarCodigoEscaneado(exacto.codigo_barras)
+      } else if (productosMostrador.length === 1) {
+        agregar(productosMostrador[0])
+        setBusquedaPos('')
+      } else {
+        procesarCodigoEscaneado(busquedaPos.trim())
+      }
+    }
+  }
+
+  const cambio =
+    metodoPago === 'Efectivo' && montoRecibido !== ''
+      ? Math.max(0, Number(montoRecibido) - total)
+      : 0
+
+  const confirmarVentaRapida = async () => {
+    if (!carrito.length || procesandoVenta) return
+    setProcesandoVenta(true)
+    setFeedbackPos(null)
+    const t0 = performance.now()
+    try {
+      const detalles = carrito.map((i) => ({
+        producto_id: i.id,
+        cantidad: i.cantidad,
+      }))
+      const resultado = await registrar(detalles, {
+        metodo_pago: metodoPago,
+        monto_recibido:
+          metodoPago === 'Efectivo' && montoRecibido !== '' ? Number(montoRecibido) : total,
+        cliente_nombre: clienteNombre || null,
+        total_estimado: total,
+      })
+      const duracionSeg = ((performance.now() - t0) / 1000).toFixed(2)
+      setFeedbackPos({
+        tipo: 'ok',
+        texto: `${
+          resultado.offline ? '📴 Venta guardada sin conexión' : '✅ Venta completada'
+        } en ${duracionSeg}s · Total: $${fmt(resultado.total || total)}${
+          cambio > 0 ? ` · Cambio: $${fmt(cambio)}` : ''
+        }`,
+      })
+      vaciar()
+      setMontoRecibido('')
+      setClienteNombre('')
+      recargarProductos().catch(() => {})
+      window.dispatchEvent(new Event('venta-completada'))
+      inputCodigoRef.current?.focus()
+    } catch (err) {
+      setFeedbackPos({
+        tipo: 'error',
+        texto: err.message || 'Error al procesar la venta',
+      })
+    } finally {
+      setProcesandoVenta(false)
+    }
+  }
+
+  const guardarProductoProvisionalYAnadir = async (form) => {
+    const creado = await crearProducto({
+      ...form,
+      es_provisional: true,
+    })
+    if (creado) {
+      agregar(creado)
+      setCodigoNoEncontrado(null)
+      setBusquedaPos('')
+      setFeedbackPos({
+        tipo: 'ok',
+        texto: `✅ Producto "${creado.nombre}" creado y añadido al carrito.`,
+      })
+    }
+  }
+
+  // Cargar cajeros disponibles (solo Admin)
   useEffect(() => {
     if (esAdmin) {
       usuarioService
@@ -265,7 +487,6 @@ export default function Ventas() {
     }
   }, [esAdmin])
 
-  // 2. Cargar Actividad del Día (Server-side)
   const cargarActividad = useCallback(async () => {
     if (!esAdmin) return
     setCargandoActividad(true)
@@ -293,42 +514,44 @@ export default function Ventas() {
     }
   }, [modoVista, cargarActividad])
 
-  // 3. Cargar Histórico (o vista simple para cajeros)
-  const cargarHistorico = useCallback(async (tabActual) => {
-    if (!usuario?.empresa_id) return
-    setCargandoHistorico(true)
-    setErrorHistorico(null)
+  const cargarHistorico = useCallback(
+    async (tabActual) => {
+      if (!usuario?.empresa_id) return
+      setCargandoHistorico(true)
+      setErrorHistorico(null)
 
-    try {
-      const ahora = new Date()
-      const fin = ahora.toISOString()
-      const inicio = new Date(ahora)
+      try {
+        const ahora = new Date()
+        const fin = ahora.toISOString()
+        const inicio = new Date(ahora)
 
-      if (tabActual === 'hoy') {
-        inicio.setHours(0, 0, 0, 0)
-      } else if (tabActual === 'semana') {
-        const dayOfWeek = inicio.getDay() || 7
-        inicio.setDate(inicio.getDate() - (dayOfWeek - 1))
-        inicio.setHours(0, 0, 0, 0)
-      } else {
-        inicio.setDate(inicio.getDate() - 30)
-        inicio.setHours(0, 0, 0, 0)
+        if (tabActual === 'hoy') {
+          inicio.setHours(0, 0, 0, 0)
+        } else if (tabActual === 'semana') {
+          const dayOfWeek = inicio.getDay() || 7
+          inicio.setDate(inicio.getDate() - (dayOfWeek - 1))
+          inicio.setHours(0, 0, 0, 0)
+        } else {
+          inicio.setDate(inicio.getDate() - 30)
+          inicio.setHours(0, 0, 0, 0)
+        }
+
+        const url = new URL(`${BASE}/ventas/${usuario.empresa_id}`, window.location.origin)
+        url.searchParams.set('fecha_inicio', inicio.toISOString())
+        url.searchParams.set('fecha_fin', fin)
+
+        const res = await authService.fetchAuth(url.toString())
+        if (!res.ok) throw new Error('Error cargando ventas')
+        const data = await res.json()
+        setVentasHistorico(data || [])
+      } catch (e) {
+        setErrorHistorico(e.message)
+      } finally {
+        setCargandoHistorico(false)
       }
-
-      const url = new URL(`${BASE}/ventas/${usuario.empresa_id}`, window.location.origin)
-      url.searchParams.set('fecha_inicio', inicio.toISOString())
-      url.searchParams.set('fecha_fin', fin)
-
-      const res = await authService.fetchAuth(url.toString())
-      if (!res.ok) throw new Error('Error cargando ventas')
-      const data = await res.json()
-      setVentasHistorico(data || [])
-    } catch (e) {
-      setErrorHistorico(e.message)
-    } finally {
-      setCargandoHistorico(false)
-    }
-  }, [usuario])
+    },
+    [usuario]
+  )
 
   useEffect(() => {
     if (modoVista === 'historico') {
@@ -336,29 +559,49 @@ export default function Ventas() {
     }
   }, [modoVista, tabHistorico, cargarHistorico])
 
-  // Navegación de fechas para Actividad del Día
+  const ejecutarAnulacion = async (e) => {
+    e.preventDefault()
+    if (!ventaAAnular || motivoAnulacion.trim().length < 3) return
+    setAnulando(true)
+    try {
+      await anular(ventaAAnular.id, motivoAnulacion.trim())
+      setVentaAAnular(null)
+      setMotivoAnulacion('')
+      if (modoVista === 'actividad') cargarActividad()
+      if (modoVista === 'historico') cargarHistorico(tabHistorico)
+      recargarProductos().catch(() => {})
+    } catch (err) {
+      alert(err.message)
+    } finally {
+      setAnulando(false)
+    }
+  }
+
   const esHoy = fechaActividad === getHoyColombia()
   const irDiaAnterior = () => setFechaActividad((prev) => sumarDias(prev, -1))
   const irDiaSiguiente = () => setFechaActividad((prev) => sumarDias(prev, 1))
   const irAHoy = () => setFechaActividad(getHoyColombia())
 
-  // Métricas calculadas para la actividad del día
   const totalActividad = useMemo(
-    () => ventasActividad.reduce((acc, v) => acc + (v.total || 0), 0),
+    () =>
+      ventasActividad
+        .filter((v) => v.estado !== 'ANULADA')
+        .reduce((acc, v) => acc + (v.total || 0), 0),
     [ventasActividad]
   )
 
-  // Desglose de ventas por cajero
   const desgloseVendedores = useMemo(() => {
     const mapa = {}
-    ventasActividad.forEach((v) => {
-      const nombre = v.vendedor_nombre_snapshot || 'Admin'
-      if (!mapa[nombre]) {
-        mapa[nombre] = { conteo: 0, total: 0 }
-      }
-      mapa[nombre].conteo += 1
-      mapa[nombre].total += v.total || 0
-    })
+    ventasActividad
+      .filter((v) => v.estado !== 'ANULADA')
+      .forEach((v) => {
+        const nombre = v.vendedor_nombre_snapshot || 'Admin'
+        if (!mapa[nombre]) {
+          mapa[nombre] = { conteo: 0, total: 0 }
+        }
+        mapa[nombre].conteo += 1
+        mapa[nombre].total += v.total || 0
+      })
     return Object.entries(mapa).map(([nombre, stats]) => ({
       nombre,
       ...stats,
@@ -366,58 +609,427 @@ export default function Ventas() {
   }, [ventasActividad])
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
-      {/* Encabezado y Selector de Modo (solo Admin) */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-5 max-w-6xl mx-auto">
+      {/* Encabezado y Selector de Modo */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">
-            {esAdmin ? 'Ventas & Actividad' : 'Ventas del Mostrador'}
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900">
+            Caja Rápida y Ventas
           </h1>
-          <p className="text-sm text-slate-500 mt-0.5">
-            {esAdmin
-              ? 'Monitoreo de ingresos en vivo y trazabilidad de cajeros'
-              : 'Historial de ventas registradas'}
+          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+            Registra una venta en menos de 3 segundos con lector USB, cámara o toque rápido
           </p>
         </div>
 
-        {esAdmin && (
-          <div className="flex bg-slate-100 p-1 rounded-xl shrink-0">
+        <div className="flex bg-slate-100 p-1 rounded-xl shrink-0 overflow-x-auto">
+          <button
+            type="button"
+            onClick={() => setModoVista('pos')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all min-h-[40px] ${
+              modoVista === 'pos'
+                ? 'bg-violet-600 text-white shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Zap size={16} />
+            Venta Rápida (&lt;3s)
+          </button>
+          {esAdmin && (
             <button
               type="button"
               onClick={() => setModoVista('actividad')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all ${
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all min-h-[40px] ${
                 modoVista === 'actividad'
                   ? 'bg-white text-violet-700 shadow-sm'
                   : 'text-slate-600 hover:text-slate-800'
               }`}
             >
               <Clock size={16} />
-              Actividad del Día
+              Actividad Hoy
             </button>
-            <button
-              type="button"
-              onClick={() => setModoVista('historico')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all ${
-                modoVista === 'historico'
-                  ? 'bg-white text-violet-700 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-800'
-              }`}
-            >
-              <Calendar size={16} />
-              Histórico
-            </button>
-          </div>
-        )}
+          )}
+          <button
+            type="button"
+            onClick={() => setModoVista('historico')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all min-h-[40px] ${
+              modoVista === 'historico'
+                ? 'bg-white text-violet-700 shadow-sm'
+                : 'text-slate-600 hover:text-slate-800'
+            }`}
+          >
+            <Calendar size={16} />
+            Histórico
+          </button>
+        </div>
       </div>
 
       {/* ======================================================== */}
-      {/* MODO 1: ACTIVIDAD DEL DÍA (Exclusivo Admin) */}
+      {/* MODO 0: CAJA RÁPIDA (< 3 SEGUNDOS POS)                   */}
+      {/* ======================================================== */}
+      {modoVista === 'pos' && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+          {/* Columna izquierda: Escáner + Cuadrícula de Productos con Foto */}
+          <div className="lg:col-span-7 space-y-4">
+            {/* Barra de escaneo y búsqueda instantánea */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-3.5 shadow-sm space-y-3">
+              <div className="flex flex-col sm:flex-row gap-2">
+                <div className="relative flex-1">
+                  <Search
+                    size={18}
+                    className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
+                  />
+                  <input
+                    ref={inputCodigoRef}
+                    type="text"
+                    value={busquedaPos}
+                    onChange={(e) => {
+                      setBusquedaPos(e.target.value)
+                      setCodigoNoEncontrado(null)
+                    }}
+                    onKeyDown={handleKeyDownScanner}
+                    placeholder="Escanea código de barras (USB) o escribe nombre y presiona Enter..."
+                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 min-h-[46px]"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEscanerAbierto(true)}
+                  className="bg-slate-900 hover:bg-slate-800 text-white font-semibold px-4 py-3 rounded-xl text-sm flex items-center justify-center gap-2 shrink-0 min-h-[46px]"
+                >
+                  <ScanBarcode size={18} />
+                  <span>Cámara</span>
+                </button>
+              </div>
+
+              {/* Filtros rápidos */}
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSoloFrecuentes(false)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                      !soloFrecuentes
+                        ? 'bg-violet-100 text-violet-800'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    Todos ({productos.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSoloFrecuentes(true)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors ${
+                      soloFrecuentes
+                        ? 'bg-amber-100 text-amber-800'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    <Star size={13} /> Frecuentes
+                  </button>
+                </div>
+                <span className="text-[11px] text-slate-400">
+                  Toca cualquier producto para sumar +1 al carrito
+                </span>
+              </div>
+
+              {/* Alerta de código desconocido sin perder la venta actual */}
+              {codigoNoEncontrado && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="text-xs text-amber-900">
+                    <strong>Código &ldquo;{codigoNoEncontrado}&rdquo; no reconocido.</strong>{' '}
+                    Puedes registrarlo ahora mismo sin perder el carrito actual.
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setModalProvisionalAbierto(true)}
+                      className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-3 py-2 rounded-lg"
+                    >
+                      + Crear y añadir al carrito
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCodigoNoEncontrado(null)}
+                      className="text-xs text-slate-500 px-2 py-1"
+                    >
+                      Cerrar
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Cuadrícula de Acceso Rápido con Fotografía Obligatoria */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {productosMostrador.slice(0, 24).map((p) => {
+                const agotado = p.cantidad_actual <= 0
+                const enCarrito = carrito.find((c) => c.id === p.id)
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    disabled={agotado}
+                    onClick={() => agregar(p)}
+                    className={`group text-left bg-white rounded-2xl border p-2.5 transition-all flex flex-col justify-between relative min-h-[148px] ${
+                      agotado
+                        ? 'opacity-50 border-slate-200 cursor-not-allowed'
+                        : enCarrito
+                        ? 'border-violet-500 ring-2 ring-violet-500/20 shadow-sm'
+                        : 'border-slate-200 hover:border-violet-300 hover:shadow-sm active:scale-[0.99]'
+                    }`}
+                  >
+                    {enCarrito && (
+                      <span className="absolute top-2 right-2 z-10 bg-violet-600 text-white text-xs font-extrabold w-6 h-6 rounded-full flex items-center justify-center shadow">
+                        {enCarrito.cantidad}
+                      </span>
+                    )}
+                    <div className="w-full h-24 rounded-xl bg-slate-100 overflow-hidden mb-2 border border-slate-100">
+                      {p.foto_url ? (
+                        <img
+                          src={p.foto_url}
+                          alt={p.nombre}
+                          loading="lazy"
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-2xl">
+                          📦
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <p className="font-bold text-xs sm:text-sm text-slate-800 line-clamp-1">
+                        {p.nombre}
+                      </p>
+                      <div className="flex items-center justify-between mt-1">
+                        <span className="text-sm font-extrabold text-violet-700">
+                          ${fmt(p.precio_venta)}
+                        </span>
+                        <span className="text-[10px] text-slate-400">
+                          Stock: {Number(p.cantidad_actual).toLocaleString('es-CO')}
+                        </span>
+                      </div>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Columna derecha: Ticket Activo + Pago en 1 Toque */}
+          <div className="lg:col-span-5 bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-5 space-y-4 lg:sticky lg:top-20">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h2 className="font-bold text-base text-slate-900">
+                  Cuenta Actual ({carrito.reduce((s, i) => s + i.cantidad, 0)} ítems)
+                </h2>
+                <p className="text-xs text-slate-400">
+                  El total y el inventario local se actualizan al instante
+                </p>
+              </div>
+              {carrito.length > 0 && (
+                <button
+                  type="button"
+                  onClick={vaciar}
+                  className="text-xs text-red-500 hover:text-red-700 font-semibold flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-red-50"
+                >
+                  <Trash2 size={14} /> Vaciar
+                </button>
+              )}
+            </div>
+
+            {/* Lista de ítems en el carrito */}
+            <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
+              {carrito.length === 0 ? (
+                <div className="py-8 text-center text-slate-400 text-xs">
+                  Escanea un código de barras o toca un producto para iniciar la venta.
+                </div>
+              ) : (
+                carrito.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-50 border border-slate-100"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                      {item.foto_url && (
+                        <img
+                          src={item.foto_url}
+                          alt={item.nombre}
+                          className="w-10 h-10 rounded-lg object-cover border border-slate-200 shrink-0 bg-white"
+                        />
+                      )}
+                      <div className="min-w-0">
+                        <p className="font-semibold text-xs sm:text-sm text-slate-800 truncate">
+                          {item.nombre}
+                        </p>
+                        <p className="text-[11px] text-slate-500">
+                          ${fmt(item.precio_venta)} × {item.cantidad} ={' '}
+                          <strong className="text-violet-700">
+                            ${fmt(item.precio_venta * item.cantidad)}
+                          </strong>
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => restar(item.id)}
+                        className="w-9 h-9 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 flex items-center justify-center text-slate-700"
+                        aria-label="Restar unidad"
+                      >
+                        <Minus size={14} />
+                      </button>
+                      <input
+                        type="number"
+                        step="any"
+                        min="0.001"
+                        value={item.cantidad}
+                        onChange={(e) => setCantidad(item.id, e.target.value)}
+                        className="w-12 text-center text-xs font-bold bg-white border border-slate-200 rounded-lg py-2"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => agregar(item)}
+                        className="w-9 h-9 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 flex items-center justify-center text-slate-700"
+                        aria-label="Sumar unidad"
+                      >
+                        <Plus size={14} />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Selección de método de pago en 1 toque */}
+            <div className="pt-2 border-t border-slate-100">
+              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2">
+                Método de Pago Rápido
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {METODOS_PAGO.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setMetodoPago(m.id)}
+                    className={`py-2.5 px-2 rounded-xl text-xs font-bold border transition-all min-h-[44px] ${
+                      metodoPago === m.id
+                        ? 'bg-violet-600 text-white border-violet-600 shadow-sm'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Controles de efectivo y cálculo automático de vueltas */}
+            {metodoPago === 'Efectivo' && carrito.length > 0 && (
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-2">
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setMontoRecibido(String(Math.round(total)))}
+                    className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-violet-50"
+                  >
+                    Exacto
+                  </button>
+                  {BILLETES_RAPIDOS.map((billete) => (
+                    <button
+                      key={billete}
+                      type="button"
+                      onClick={() => setMontoRecibido(String(billete))}
+                      className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-violet-50"
+                    >
+                      ${fmt(billete)}
+                    </button>
+                  ))}
+                </div>
+                <div className="grid grid-cols-2 gap-2 items-center pt-1">
+                  <div>
+                    <span className="text-[11px] text-slate-500 block">Efectivo recibido ($)</span>
+                    <input
+                      type="number"
+                      placeholder={String(Math.round(total))}
+                      value={montoRecibido}
+                      onChange={(e) => setMontoRecibido(e.target.value)}
+                      className="w-full border border-slate-200 bg-white rounded-lg px-2.5 py-1.5 text-sm font-bold"
+                    />
+                  </div>
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-1.5 text-right">
+                    <span className="text-[10px] font-bold text-emerald-700 uppercase block">
+                      Cambio / Vueltas
+                    </span>
+                    <span className="text-base font-extrabold text-emerald-700">
+                      ${fmt(cambio)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {metodoPago === 'Fiado' && carrito.length > 0 && (
+              <div>
+                <label className="text-xs font-semibold text-amber-800 block mb-1">
+                  Nombre del cliente (Cuenta por cobrar / Fiado)
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ej: Doña Marta - Casa esquinera"
+                  value={clienteNombre}
+                  onChange={(e) => setClienteNombre(e.target.value)}
+                  className="w-full border border-amber-300 bg-amber-50/40 rounded-xl px-3 py-2.5 text-sm"
+                />
+              </div>
+            )}
+
+            {feedbackPos && (
+              <div
+                className={`p-3 rounded-xl text-xs font-semibold ${
+                  feedbackPos.tipo === 'ok'
+                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                    : 'bg-red-50 text-red-700 border border-red-200'
+                }`}
+              >
+                {feedbackPos.texto}
+              </div>
+            )}
+
+            {/* Total y Botón Principal de Confirmación */}
+            <div className="pt-2 border-t border-slate-100 space-y-3">
+              <div className="flex items-baseline justify-between">
+                <span className="text-sm font-bold text-slate-600 uppercase tracking-wider">
+                  Total a Cobrar
+                </span>
+                <span className="text-3xl font-extrabold text-violet-700">
+                  ${fmt(total)}
+                </span>
+              </div>
+
+              <button
+                type="button"
+                disabled={!carrito.length || procesandoVenta}
+                onClick={confirmarVentaRapida}
+                className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 text-white font-extrabold py-4 rounded-xl text-base shadow-sm transition-all min-h-[52px] flex items-center justify-center gap-2"
+              >
+                <Zap size={20} />
+                {procesandoVenta
+                  ? 'Registrando venta...'
+                  : `Confirmar Venta (${metodoPago})`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODO 1: ACTIVIDAD DEL DÍA (Exclusivo Admin)              */}
       {/* ======================================================== */}
       {esAdmin && modoVista === 'actividad' && (
         <div className="space-y-5">
-          {/* Barra de Control: Selector de Fecha + Filtro Cajero */}
           <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-            {/* Controles de Fecha Mobile-First */}
             <div className="flex items-center justify-between sm:justify-start gap-2">
               <button
                 type="button"
@@ -454,7 +1066,6 @@ export default function Ventas() {
               )}
             </div>
 
-            {/* Filtro por Vendedor (Server-Side) */}
             <div className="flex items-center gap-2">
               <Filter size={16} className="text-slate-400 shrink-0 hidden sm:block" />
               <select
@@ -480,12 +1091,11 @@ export default function Ventas() {
             </div>
           </div>
 
-          {/* Tarjeta de Resumen Superior */}
           <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                  Total Ingresos Registrados ({formatearFechaCabecera(fechaActividad)})
+                  Total Ingresos Vigentes ({formatearFechaCabecera(fechaActividad)})
                 </span>
                 <p className="text-3xl sm:text-4xl font-extrabold text-violet-700">
                   {cargandoActividad ? '…' : `$${fmt(totalActividad)}`}
@@ -497,12 +1107,11 @@ export default function Ventas() {
                   {cargandoActividad ? '…' : ventasActividad.length}
                 </p>
                 <p className="text-xs text-slate-400">
-                  {ventasActividad.length === 1 ? 'venta realizada' : 'ventas realizadas'}
+                  {ventasActividad.length === 1 ? 'operación registrada' : 'operaciones registradas'}
                 </p>
               </div>
             </div>
 
-            {/* Desglose por Vendedor */}
             {desgloseVendedores.length > 0 && (
               <div className="mt-4 pt-4 border-t border-slate-100">
                 <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2">
@@ -524,7 +1133,6 @@ export default function Ventas() {
             )}
           </div>
 
-          {/* Timeline de Ventas con Acordeón */}
           {errorActividad && (
             <div className="bg-red-50 border border-red-200 text-red-600 p-4 rounded-xl text-sm flex items-center justify-between">
               <span>{errorActividad}</span>
@@ -553,16 +1161,18 @@ export default function Ventas() {
               <h3 className="font-semibold text-slate-800 text-base">
                 Sin ventas registradas en esta fecha
               </h3>
-              <p className="text-sm text-slate-500 max-w-sm mx-auto mt-1">
-                {cajeroFiltro
-                  ? 'Este cajero no registró ventas en la fecha seleccionada.'
-                  : 'Aún no se han completado transacciones para este día comercial.'}
-              </p>
             </div>
           ) : (
             <div className="space-y-3">
               {ventasActividad.map((venta) => (
-                <VentaTimelineItem key={venta.id} venta={venta} />
+                <VentaTimelineItem
+                  key={venta.id}
+                  venta={venta}
+                  onAnularClick={(v) => {
+                    setVentaAAnular(v)
+                    setMotivoAnulacion('')
+                  }}
+                />
               ))}
             </div>
           )}
@@ -570,11 +1180,10 @@ export default function Ventas() {
       )}
 
       {/* ======================================================== */}
-      {/* MODO 2: HISTÓRICO GENERAL (O vista cajero) */}
+      {/* MODO 2: HISTÓRICO GENERAL                                */}
       {/* ======================================================== */}
-      {(modoVista === 'historico' || !esAdmin) && (
+      {modoVista === 'historico' && (
         <div className="space-y-5">
-          {/* Segmented control para pestañas históricas */}
           <div className="flex gap-1 bg-slate-100 p-1 rounded-xl">
             {TABS_HISTORICO.map((t) => (
               <button
@@ -597,7 +1206,6 @@ export default function Ventas() {
             <div className="bg-red-50 text-red-600 p-4 rounded-xl text-sm">{errorHistorico}</div>
           )}
 
-          {/* Banner de Total del período */}
           <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm flex items-center justify-between">
             <div>
               <p className="text-xs text-slate-400 uppercase tracking-wide font-bold mb-1">
@@ -610,7 +1218,11 @@ export default function Ventas() {
               <p className="text-3xl sm:text-4xl font-extrabold text-violet-600">
                 {cargandoHistorico
                   ? '…'
-                  : `$${fmt(ventasHistorico.reduce((s, v) => s + (v.total || 0), 0))}`}
+                  : `$${fmt(
+                      ventasHistorico
+                        .filter((v) => v.estado !== 'ANULADA')
+                        .reduce((s, v) => s + (v.total || 0), 0)
+                    )}`}
               </p>
             </div>
             <div className="text-right">
@@ -623,7 +1235,6 @@ export default function Ventas() {
             </div>
           </div>
 
-          {/* Lista de ventas histórica */}
           {cargandoHistorico ? (
             <div className="flex items-center justify-center h-48 bg-white rounded-xl border border-slate-200">
               <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-violet-500" />
@@ -636,15 +1247,88 @@ export default function Ventas() {
           ) : (
             <div className="space-y-3">
               {ventasHistorico.map((venta) => (
-                <VentaTimelineItem key={venta.id} venta={venta} />
+                <VentaTimelineItem
+                  key={venta.id}
+                  venta={venta}
+                  onAnularClick={(v) => {
+                    setVentaAAnular(v)
+                    setMotivoAnulacion('')
+                  }}
+                />
               ))}
             </div>
           )}
 
-          {/* Botón de exportación a Excel solo visible para administradores */}
           {canExportReports(usuario) && tabHistorico === 'historico' && (
             <ExcelExport empresaId={usuario?.empresa_id} />
           )}
+        </div>
+      )}
+
+      {/* Modal Escáner de Cámara para Caja */}
+      {escanerAbierto && (
+        <EscanerModal
+          onDetect={(codigo) => {
+            setEscanerAbierto(false)
+            procesarCodigoEscaneado(codigo)
+          }}
+          onClose={() => setEscanerAbierto(false)}
+        />
+      )}
+
+      {/* Modal para crear producto desconocido sobre la marcha sin perder el carrito */}
+      {modalProvisionalAbierto && (
+        <ModalProducto
+          producto={null}
+          codigoInicial={codigoNoEncontrado || ''}
+          onGuardar={guardarProductoProvisionalYAnadir}
+          onCerrar={() => setModalProvisionalAbierto(false)}
+        />
+      )}
+
+      {/* Modal de Confirmación de Anulación Auditable */}
+      {ventaAAnular && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4">
+            <h3 className="text-lg font-bold text-slate-900">
+              Anular Venta #{String(ventaAAnular.id).split('-')[0]}
+            </h3>
+            <p className="text-xs text-slate-600">
+              Esta acción revertirá automáticamente las existencias al inventario, descontará el ingreso de la sesión de caja activa y dejará registro en auditoría.
+            </p>
+            <form onSubmit={ejecutarAnulacion} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Motivo de la anulación (obligatorio)
+                </label>
+                <textarea
+                  required
+                  minLength={3}
+                  rows={3}
+                  value={motivoAnulacion}
+                  onChange={(e) => setMotivoAnulacion(e.target.value)}
+                  placeholder="Ej: Cliente devolvió producto o error de digitación en cantidad..."
+                  className="w-full border border-slate-300 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
+                />
+              </div>
+              <div className="flex gap-2 justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => setVentaAAnular(null)}
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={anulando || motivoAnulacion.trim().length < 3}
+                  className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 disabled:bg-slate-200 text-white text-xs font-bold"
+                >
+                  {anulando ? 'Anulando...' : 'Confirmar Anulación'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

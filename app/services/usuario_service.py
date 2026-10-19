@@ -52,8 +52,12 @@ def crear_cajero(
             detail="Empresa no encontrada",
         )
 
-    # 3. Validar límite de cajeros activos si el plan es BASIC
-    if empresa.plan == models.PlanEmpresa.BASIC:
+    # 3. Validar límite de cajeros activos según el Plan Comercial configurado
+    from app.services import entitlement_service
+    cfg_plan = entitlement_service.obtener_config_plan(empresa.plan, db)
+    max_permitidos = cfg_plan.max_cajeros if empresa.plan != models.PlanEmpresa.BASIC else MAX_CAJEROS_BASIC
+
+    if max_permitidos < 9999:
         cajeros_activos = (
             db.query(models.Usuario)
             .filter(
@@ -63,10 +67,10 @@ def crear_cajero(
             )
             .count()
         )
-        if cajeros_activos >= MAX_CAJEROS_BASIC:
+        if cajeros_activos >= max_permitidos:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Has alcanzado el límite de 3 cajeros activos en tu Plan Básico. Actualiza al Plan Pro para cajeros ilimitados.",
+                detail=f"Has alcanzado el límite de {max_permitidos} cajeros activos en tu Plan {'Básico' if max_permitidos == 3 else cfg_plan.nombre}. Actualiza al Plan Pro para cajeros ilimitados.",
             )
 
     # 4. Crear usuario cajero dentro de la misma transacción
@@ -92,7 +96,7 @@ def cambiar_estado_cajero(
 ) -> models.Usuario:
     """
     Activa o desactiva a un cajero. Si es reactivación (nuevo_estado=True),
-    adquiere lock sobre la empresa y valida que no supere el límite de 3 cajeros activos.
+    adquiere lock sobre la empresa y valida que no supere el límite de cajeros activos del plan.
     """
     # 1. Aislamiento multi-tenant estricto: buscar por id, empresa_id y rol
     cajero = (
@@ -114,7 +118,7 @@ def cambiar_estado_cajero(
     if cajero.is_active == nuevo_estado:
         return cajero
 
-    # 2. Si se va a reactivar, adquirir lock y verificar cupo en Plan Básico
+    # 2. Si se va a reactivar, adquirir lock y verificar cupo según el plan
     if nuevo_estado is True:
         empresa = (
             db.query(models.Empresa)
@@ -122,21 +126,25 @@ def cambiar_estado_cajero(
             .with_for_update()
             .first()
         )
-        if empresa and empresa.plan == models.PlanEmpresa.BASIC:
-            cajeros_activos = (
-                db.query(models.Usuario)
-                .filter(
-                    models.Usuario.empresa_id == admin_user.empresa_id,
-                    models.Usuario.rol == models.RolUsuario.TENDERO,
-                    models.Usuario.is_active.is_(True),
+        if empresa:
+            from app.services import entitlement_service
+            cfg_plan = entitlement_service.obtener_config_plan(empresa.plan, db)
+            max_permitidos = cfg_plan.max_cajeros if empresa.plan != models.PlanEmpresa.BASIC else MAX_CAJEROS_BASIC
+            if max_permitidos < 9999:
+                cajeros_activos = (
+                    db.query(models.Usuario)
+                    .filter(
+                        models.Usuario.empresa_id == admin_user.empresa_id,
+                        models.Usuario.rol == models.RolUsuario.TENDERO,
+                        models.Usuario.is_active.is_(True),
+                    )
+                    .count()
                 )
-                .count()
-            )
-            if cajeros_activos >= MAX_CAJEROS_BASIC:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Has alcanzado el límite de 3 cajeros activos en tu Plan Básico. Actualiza al Plan Pro para cajeros ilimitados.",
-                )
+                if cajeros_activos >= max_permitidos:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail=f"Has alcanzado el límite de {max_permitidos} cajeros activos en tu Plan {'Básico' if max_permitidos == 3 else cfg_plan.nombre}. Actualiza al Plan Pro para cajeros ilimitados.",
+                    )
 
     cajero.is_active = nuevo_estado
     db.commit()

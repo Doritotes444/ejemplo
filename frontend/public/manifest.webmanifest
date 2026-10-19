@@ -1,0 +1,27 @@
+{
+  "name": "Tiendapp — Gestión Inteligente de Tiendas",
+  "short_name": "Tiendapp",
+  "description": "Sistema POS, inventario con fotos, caja, comprobantes QR y finanzas 360° para tiendas de barrio en Colombia.",
+  "start_url": "/ventas",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#F8FAFC",
+  "theme_color": "#0F172A",
+  "lang": "es-CO",
+  "categories": ["business", "finance", "productivity"],
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='40' fill='%231E40AF'/%3E%3Cpath d='M48 64h96l-8 80H56L48 64z' fill='%23FFFFFF'/%3E%3Cpath d='M72 64V52a24 24 0 0148 0v12' stroke='%2393C5FD' stroke-width='12' fill='none' stroke-linecap='round'/%3E%3C/svg%3E",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='108' fill='%231E40AF'/%3E%3Cpath d='M128 176h256l-22 208H150l-22-208z' fill='%23FFFFFF'/%3E%3Cpath d='M192 176v-32a64 64 0 01128 0v32' stroke='%2393C5FD' stroke-width='30' fill='none' stroke-linecap='round'/%3E%3C/svg%3E",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -361,7 +361,8 @@ function EmpresaCard({ empresa, clave, onRefresh }) {
               onChange={(e) => setPlanSeleccionado(e.target.value)}
               className="w-full text-xs border border-violet-300 rounded px-2.5 py-1.5 bg-white focus:outline-none"
             >
-              <option value="basic">Basic (POS Esencial)</option>
+              <option value="basic">Gratis / Basic (POS Esencial)</option>
+              <option value="standard">Standard (Crecimiento Comercial)</option>
               <option value="pro">Pro (Gestión Inteligente IA)</option>
               <option value="premium">Premium (Acceso total)</option>
             </select>
@@ -857,14 +858,220 @@ function TabSoporte({ clave }) {
   )
 }
 
+// ─── Tab Planes Configurables ─────────────────────────────────────────────────
+
+function TabPlanesConfig({ clave }) {
+  const [planes, setPlanes] = useState([])
+  const [cargando, setCargando] = useState(true)
+  const [mensaje, setMensaje] = useState('')
+
+  const cargarPlanes = useCallback(async () => {
+    setCargando(true)
+    try {
+      const res = await fetch(`${API}/planes`)
+      if (res.ok) setPlanes(await res.json())
+    } finally {
+      setCargando(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    cargarPlanes()
+  }, [cargarPlanes])
+
+  const guardarPlan = async (plan) => {
+    setMensaje('')
+    const res = await apiFetch(`/superadmin/planes/${plan.codigo}`, clave, {
+      method: 'PUT',
+      body: JSON.stringify(plan),
+    })
+    if (res.ok) {
+      setMensaje(`Plan ${plan.nombre} actualizado correctamente.`)
+      cargarPlanes()
+    }
+  }
+
+  const actualizarCampo = (codigo, campo, valor) => {
+    setPlanes((prev) =>
+      prev.map((p) => (p.codigo === codigo ? { ...p, [campo]: valor } : p))
+    )
+  }
+
+  if (cargando) return <p className="text-sm text-slate-500 py-8">Cargando planes...</p>
+
+  return (
+    <div className="space-y-4">
+      {mensaje && (
+        <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold">
+          {mensaje}
+        </div>
+      )}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {planes.map((p) => (
+          <div
+            key={p.codigo}
+            className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm space-y-3 text-xs"
+          >
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-sm text-slate-800">{p.nombre}</span>
+              <span className="font-mono uppercase bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded">
+                {p.codigo}
+              </span>
+            </div>
+            <div>
+              <label className="block text-slate-500 mb-0.5">Precio Mensual (COP)</label>
+              <input
+                type="number"
+                value={p.precio_mensual_cop}
+                onChange={(e) =>
+                  actualizarCampo(p.codigo, 'precio_mensual_cop', Number(e.target.value))
+                }
+                className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 font-bold"
+              />
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <label className="block text-slate-500 mb-0.5">Máx Prod.</label>
+                <input
+                  type="number"
+                  value={p.max_productos}
+                  onChange={(e) =>
+                    actualizarCampo(p.codigo, 'max_productos', Number(e.target.value))
+                  }
+                  className="w-full border border-slate-200 rounded-lg px-2 py-1"
+                />
+              </div>
+              <div>
+                <label className="block text-slate-500 mb-0.5">Máx Usu.</label>
+                <input
+                  type="number"
+                  value={p.max_usuarios}
+                  onChange={(e) =>
+                    actualizarCampo(p.codigo, 'max_usuarios', Number(e.target.value))
+                  }
+                  className="w-full border border-slate-200 rounded-lg px-2 py-1"
+                />
+              </div>
+              <div>
+                <label className="block text-slate-500 mb-0.5">Ventas/Mes</label>
+                <input
+                  type="number"
+                  value={p.max_ventas_mes}
+                  onChange={(e) =>
+                    actualizarCampo(p.codigo, 'max_ventas_mes', Number(e.target.value))
+                  }
+                  className="w-full border border-slate-200 rounded-lg px-2 py-1"
+                />
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => guardarPlan(p)}
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 rounded-lg"
+            >
+              Guardar Configuración
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─── Tab Métricas Globales ────────────────────────────────────────────────────
+
+function TabMetricasGlobales({ clave }) {
+  const [metricas, setMetricas] = useState(null)
+
+  useEffect(() => {
+    apiFetch('/superadmin/metricas-globales', clave)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setMetricas(d))
+      .catch(() => {})
+  }, [clave])
+
+  if (!metricas) return <p className="text-sm text-slate-500 py-8">Cargando métricas globales...</p>
+
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <span className="text-xs text-slate-400 block">Tiendas Activas</span>
+        <strong className="text-2xl text-slate-800">
+          {metricas.empresas_activas} / {metricas.total_empresas}
+        </strong>
+      </div>
+      <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <span className="text-xs text-slate-400 block">Usuarios Totales</span>
+        <strong className="text-2xl text-slate-800">{metricas.total_usuarios}</strong>
+      </div>
+      <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <span className="text-xs text-slate-400 block">Productos Registrados</span>
+        <strong className="text-2xl text-slate-800">{metricas.total_productos}</strong>
+      </div>
+      <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <span className="text-xs text-slate-400 block">Transacciones POS</span>
+        <strong className="text-2xl text-indigo-600">{metricas.total_ventas_registradas}</strong>
+      </div>
+      <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <span className="text-xs text-slate-400 block">Volumen Transaccionado</span>
+        <strong className="text-xl text-emerald-600">
+          ${Number(metricas.volumen_transaccionado_cop || 0).toLocaleString('es-CO')}
+        </strong>
+      </div>
+      <div className="bg-white rounded-xl border border-slate-200 p-4">
+        <span className="text-xs text-slate-400 block">Tickets Abiertos</span>
+        <strong className="text-2xl text-amber-600">{metricas.tickets_soporte_abiertos}</strong>
+      </div>
+    </div>
+  )
+}
+
+// ─── Tab Auditoría ────────────────────────────────────────────────────────────
+
+function TabAuditoria({ clave }) {
+  const [logs, setLogs] = useState([])
+
+  useEffect(() => {
+    apiFetch('/superadmin/auditoria?limit=60', clave)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d) => setLogs(d))
+      .catch(() => {})
+  }, [clave])
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <div className="p-4 border-b border-slate-100 font-bold text-sm text-slate-800">
+        Bitácora de Auditoría y Eventos Críticos ({logs.length})
+      </div>
+      <div className="divide-y divide-slate-100 max-h-[540px] overflow-y-auto text-xs">
+        {logs.map((l) => (
+          <div key={l.id} className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <span className="font-bold text-indigo-700 mr-2">[{l.accion}]</span>
+              <span className="font-semibold text-slate-700">{l.entidad}:</span>{' '}
+              <span className="text-slate-600">{l.detalle}</span>
+            </div>
+            <div className="text-slate-400 shrink-0 font-mono text-[11px]">
+              {l.usuario_email || 'sistema'} · {l.created_at ? new Date(l.created_at).toLocaleString('es-CO') : ''}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Panel ───────────────────────────────────────────────────────────────
 
 function PanelPrincipal({ clave, onLogout }) {
   const [tabActiva, setTabActiva] = useState('comercios')
 
   const TABS = [
-    { id: 'comercios', label: 'Comercios' },
-    { id: 'soporte', label: 'Soporte' },
+    { id: 'comercios', label: 'Tiendas y Comercios' },
+    { id: 'planes', label: 'Planes Configurables' },
+    { id: 'metricas', label: 'Métricas Globales' },
+    { id: 'soporte', label: 'Tickets de Soporte' },
+    { id: 'auditoria', label: 'Auditoría' },
   ]
 
   return (
@@ -876,7 +1083,7 @@ function PanelPrincipal({ clave, onLogout }) {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
           </svg>
           <span className="font-bold text-base tracking-wide">Panel Super Admin</span>
-          <span className="hidden sm:inline text-slate-400 text-xs font-mono ml-2">Gestion Neiva</span>
+          <span className="hidden sm:inline text-slate-400 text-xs font-mono ml-2">Tiendapp · Gestión Neiva</span>
         </div>
         <button
           onClick={onLogout}
@@ -887,13 +1094,13 @@ function PanelPrincipal({ clave, onLogout }) {
       </header>
 
       {/* Tabs */}
-      <div className="bg-white border-b border-slate-200 px-6">
+      <div className="bg-white border-b border-slate-200 px-6 overflow-x-auto">
         <nav className="flex gap-6">
           {TABS.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setTabActiva(tab.id)}
-              className={`py-3 text-sm font-semibold border-b-2 transition-colors ${
+              className={`py-3 text-sm font-semibold border-b-2 whitespace-nowrap transition-colors ${
                 tabActiva === tab.id
                   ? 'border-indigo-600 text-indigo-700'
                   : 'border-transparent text-slate-500 hover:text-slate-700'
@@ -908,7 +1115,10 @@ function PanelPrincipal({ clave, onLogout }) {
       {/* Content */}
       <main className="flex-1 px-4 sm:px-6 py-6 max-w-7xl mx-auto w-full">
         {tabActiva === 'comercios' && <TabComercios clave={clave} />}
+        {tabActiva === 'planes' && <TabPlanesConfig clave={clave} />}
+        {tabActiva === 'metricas' && <TabMetricasGlobales clave={clave} />}
         {tabActiva === 'soporte' && <TabSoporte clave={clave} />}
+        {tabActiva === 'auditoria' && <TabAuditoria clave={clave} />}
       </main>
     </div>
   )

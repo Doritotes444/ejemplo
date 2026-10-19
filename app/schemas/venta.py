@@ -19,12 +19,29 @@ class DetalleVentaCrear(BaseModel):
 
 class VentaCrear(BaseModel):
     detalles: List[DetalleVentaCrear]
+    metodo_pago: str = "efectivo"
+    monto_recibido: Optional[Decimal] = None
+    cliente_nombre: Optional[str] = None
+    notas: Optional[str] = None
+    client_operation_id: Optional[str] = None
 
     @field_validator("detalles")
     @classmethod
     def carrito_no_vacio(cls, v: List[DetalleVentaCrear]) -> List[DetalleVentaCrear]:
         if not v:
             raise ValueError("El carrito no puede estar vacío")
+        return v
+
+
+class VentaAnularRequest(BaseModel):
+    motivo: str
+
+    @field_validator("motivo")
+    @classmethod
+    def motivo_no_vacio(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("El motivo de anulación es obligatorio")
         return v
 
 
@@ -70,6 +87,15 @@ class VentaRespuesta(BaseModel):
     total: float
     usuario_id: Optional[UUID] = None
     vendedor_nombre_snapshot: Optional[str] = None
+    metodo_pago: str = "efectivo"
+    monto_recibido: Optional[float] = None
+    cambio_entregado: Optional[float] = 0.0
+    estado: str = "completada"
+    motivo_anulacion: Optional[str] = None
+    anulada_en: Optional[datetime] = None
+    cliente_nombre: Optional[str] = None
+    notas: Optional[str] = None
+    client_operation_id: Optional[str] = None
     detalles: List[DetalleVentaRespuesta]
 
 
@@ -78,3 +104,14 @@ class VentaResumen(BaseModel):
     mensaje: str
     total: float
     venta_id: UUID
+    id: Optional[UUID] = None
+    metodo_pago: str = "efectivo"
+    cambio_entregado: float = 0.0
+    idempotente: bool = False
+    client_operation_id: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _poblar_id(self):
+        if self.id is None:
+            self.id = self.venta_id
+        return self

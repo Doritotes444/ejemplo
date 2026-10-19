@@ -152,3 +152,62 @@ class EmpleadoRespuesta(BaseModel):
     is_active: bool
     created_at: datetime
 
+
+class SolicitudRecuperacionPassword(BaseModel):
+    email: EmailStr
+
+
+class ConfirmacionRecuperacionPassword(BaseModel):
+    token: str
+    new_password: Optional[str] = None
+    nueva_password: Optional[str] = None
+
+    @field_validator("new_password", "nueva_password")
+    @classmethod
+    def password_minimo(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        if len(v) < 8:
+            raise ValueError("La contraseña debe tener al menos 8 caracteres")
+        import re
+        if (
+            not re.search(r"[A-Z]", v)
+            or not re.search(r"[a-z]", v)
+            or not re.search(r"[0-9]", v)
+            or not re.search(r"[!@#$%^&*(),.?\":{}|<>]", v)
+        ):
+            raise ValueError(
+                "La contraseña debe incluir al menos una letra mayúscula, "
+                "una letra minúscula, un número y un carácter especial"
+            )
+        return v
+
+    def obtener_password(self) -> str:
+        pwd = self.new_password or self.nueva_password
+        if not pwd:
+            raise ValueError("Debes proporcionar la nueva contraseña")
+        return pwd
+
+
+class CambioPasswordAutenticado(BaseModel):
+    current_password: str
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def password_minimo(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("La contraseña debe tener al menos 8 caracteres")
+        import re
+        if (
+            not re.search(r"[A-Z]", v)
+            or not re.search(r"[a-z]", v)
+            or not re.search(r"[0-9]", v)
+            or not re.search(r"[!@#$%^&*(),.?\":{}|<>]", v)
+        ):
+            raise ValueError(
+                "La contraseña debe incluir al menos una letra mayúscula, "
+                "una letra minúscula, un número y un carácter especial"
+            )
+        return v
+

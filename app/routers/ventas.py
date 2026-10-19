@@ -8,7 +8,12 @@ from sqlalchemy.orm import Session
 from app import models
 from app.database import get_db
 from app.dependencies import get_current_user, get_current_user_admin
-from app.schemas.venta import VentaCrear, VentaRespuesta, VentaResumen
+from app.schemas.venta import (
+    VentaAnularRequest,
+    VentaCrear,
+    VentaRespuesta,
+    VentaResumen,
+)
 from app.services import venta_service
 
 router = APIRouter(prefix="/ventas", tags=["Ventas"])
@@ -42,6 +47,23 @@ def registrar_venta(
     current_user: models.Usuario = Depends(get_current_user),
 ):
     return venta_service.registrar_venta(empresa_id, data, current_user, db)
+
+
+@router.post("/{empresa_id}/{venta_id}/anular", status_code=status.HTTP_200_OK)
+def anular_venta(
+    empresa_id: UUID,
+    venta_id: UUID,
+    data: VentaAnularRequest,
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(get_current_user),
+):
+    return venta_service.anular_venta(
+        empresa_id=empresa_id,
+        venta_id=venta_id,
+        motivo=data.motivo,
+        current_user=current_user,
+        db=db,
+    )
 
 
 @router.get("/{empresa_id}", response_model=list[VentaRespuesta])

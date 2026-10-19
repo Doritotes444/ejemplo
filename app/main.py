@@ -7,7 +7,22 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.routers import auth, dashboard, empresas, productos, reportes, ventas, superadmin, soporte, agente, usuarios
+from app.routers import (
+    auth,
+    dashboard,
+    empresas,
+    productos,
+    reportes,
+    ventas,
+    superadmin,
+    soporte,
+    agente,
+    usuarios,
+    caja,
+    comprobantes,
+    planes,
+    sync,
+)
 from app.core.security_middleware import SecurityHeadersMiddleware
 
 _DEBUG = os.getenv("DEBUG", "false").lower() == "true"
@@ -73,9 +88,14 @@ for r in (
     soporte.router,
     usuarios.router,
     agente.router,
+    caja.router,
+    comprobantes.router,
+    planes.router,
+    sync.router,
 ):
     app.include_router(r)
     app.include_router(r, prefix="/api")
+
 
 # ---------------------------------------------------------------------------
 # Exception handlers globales
