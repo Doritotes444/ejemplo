@@ -1106,6 +1106,416 @@
   border-top: 1px solid var(--border-default);
 }
 
+.receipt-verification-box {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-surface);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.receipt-verification-img {
+  width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+/* ============================================================================
+   6. PANEL DE MÉTRICAS RÁPIDAS DEL DUEÑO + MINIATURAS + HARDWARE + MOBILE FIRST
+   ============================================================================ */
+
+.auth-card-wide {
+  max-width: 560px;
+}
+
+.quick-role-switch {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.owner-metrics-banner {
+  background-color: var(--bg-surface);
+  border-bottom: 1px solid var(--border-default);
+  padding: 10px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.owner-store-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 220px;
+}
+
+.store-badge-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-subtle);
+  border: 1px solid var(--border-default);
+  color: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.store-title-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.store-meta-text {
+  font-size: 11px;
+  color: var(--text-muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.owner-kpi-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.kpi-pill {
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-canvas);
+  border: 1px solid var(--border-default);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.kpi-pill-warning {
+  border-color: rgba(245, 158, 11, 0.45);
+}
+
+.kpi-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.kpi-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.kpi-value {
+  font-size: 14.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.kpi-truncate {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kpi-sub {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.btn-link-xs {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+/* Miniaturas dinámicas de productos en el POS */
+.tile-top-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+}
+
+.tile-thumb-wrap {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  background-color: var(--bg-subtle);
+  flex-shrink: 0;
+}
+
+.tile-thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.tile-thumb-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+.tile-head-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.tile-barcode-sub {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.catalog-load-more {
+  padding: 16px 0 24px;
+  display: flex;
+  justify-content: center;
+}
+
+/* Hardware: Escáner de código de barras y Verificador de Transferencias */
+.hardware-modal-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.scanner-viewport-wrap {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background-color: #090c10;
+}
+
+.barcode-reader-box {
+  width: 100%;
+  min-height: 210px;
+}
+
+.scanner-status-bar {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background-color: var(--bg-subtle);
+  border-top: 1px solid var(--border-default);
+}
+
+.scanner-manual-box {
+  padding: 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-canvas);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.scanner-manual-row {
+  display: flex;
+  gap: 8px;
+}
+
+.scanner-manual-row input {
+  flex: 1;
+}
+
+.quick-barcode-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.camera-capture-stage {
+  position: relative;
+  width: 100%;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  background-color: #0b0e14;
+  min-height: 260px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.transfer-video-el,
+.transfer-canvas-el {
+  width: 100%;
+  max-height: 310px;
+  object-fit: contain;
+  display: block;
+}
+
+.camera-live-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  background-color: rgba(9, 12, 16, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #f3f4f6;
+  font-size: 11.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.timestamp-readout {
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-canvas);
+  border: 1px solid var(--border-default);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.camera-controls-bar {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+.payment-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.transfer-verified-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background-color: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+
+.transfer-thumb-mini {
+  width: 46px;
+  height: 34px;
+  object-fit: cover;
+  border-radius: 3px;
+  border: 1px solid var(--border-default);
+  flex-shrink: 0;
+}
+
+.transfer-verified-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  font-size: 11.5px;
+}
+
+/* Mobile-First Responsive para uso en Celular */
+.mobile-pos-bottom-bar {
+  display: none;
+}
+
+.mobile-only-close {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .owner-kpi-grid {
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+
+  .mobile-only-close {
+    display: inline-flex;
+  }
+
+  .pos-layout {
+    padding-bottom: 68px;
+  }
+
+  .pos-ticket-panel {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: 52px;
+    z-index: 60;
+    width: 100%;
+    max-width: none;
+    transform: translateY(105%);
+    transition: transform 0.22s ease;
+  }
+
+  .pos-ticket-panel.mobile-drawer-open {
+    transform: translateY(0);
+  }
+
+  .mobile-pos-bottom-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 50;
+    height: 60px;
+    padding: 0 14px;
+    background-color: var(--bg-surface);
+    border-top: 1px solid var(--border-default);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .btn-mobile-ticket {
+    flex: 1;
+    height: 40px;
+  }
+
+  .hide-on-xs {
+    display: none;
+  }
+}
+
 @media print {
   body * {
     visibility: hidden;

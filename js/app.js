@@ -112,6 +112,7 @@ async function bootstrap() {
       {
         booting: false,
         initialized: Boolean(status.initialized),
+        storeProfile: status.store_profile || null,
         user: status.user || null,
       },
       false

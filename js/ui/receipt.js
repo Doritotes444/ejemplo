@@ -1,5 +1,6 @@
 import { formatCOP } from '../utils/money.js'
 import { formatQty } from '../utils/quantities.js'
+import { getStoredProfileSync } from '../core/localStore.js'
 import { openDialog } from './dialog.js'
 import { icon } from './icons.js'
 
@@ -14,21 +15,23 @@ function escapeHTML(str) {
 export function openSaleReceiptModal(sale) {
   if (!sale) return
 
+  const store = sale.store_snapshot || getStoredProfileSync()
   const dateStr = new Date(sale.created_at).toLocaleString('es-CO', {
     dateStyle: 'medium',
-    timeStyle: 'short',
+    timeStyle: 'medium',
   })
 
   const linesHTML = (sale.items || [])
     .map((item) => {
-      const lotsTag = (item.lots || [])
-        .map((l) => `${escapeHTML(l.lot_number)} (${l.quantity})`)
+      const lotArr = item.allocations || item.lots || []
+      const lotsTag = lotArr
+        .map((l) => `${escapeHTML(l.lot_number)} (-${l.quantity})`)
         .join(', ')
       return `
         <tr>
           <td>
             <div class="receipt-prod-name">${escapeHTML(item.product_name)}</div>
-            <div class="receipt-prod-meta">SKU: ${escapeHTML(item.sku)} ${lotsTag ? `· Lote: ${lotsTag}` : ''}</div>
+            <div class="receipt-prod-meta">SKU: ${escapeHTML(item.product_sku || item.sku || '')} ${lotsTag ? `· Lote: ${lotsTag}` : ''}</div>
           </td>
           <td class="num">${formatQty(item.quantity, item.unit)}</td>
           <td class="num">${formatCOP(item.unit_price)}</td>
@@ -38,6 +41,8 @@ export function openSaleReceiptModal(sale) {
     })
     .join('')
 
+  const tv = sale.transfer_verification
+
   openDialog({
     title: `Comprobante de Venta · ${escapeHTML(sale.folio)}`,
     subtitle: 'Transacción confirmada y descontada del inventario.',
@@ -45,9 +50,14 @@ export function openSaleReceiptModal(sale) {
     bodyHTML: `
       <div id="printable-receipt" class="receipt-sheet">
         <div class="receipt-header">
-          <div class="receipt-brand">KAIRO POS</div>
+          <div class="receipt-brand">${escapeHTML(store?.store_name || 'KAIRO POS')}</div>
+          ${
+            store
+              ? `<div class="receipt-meta">NIT: ${escapeHTML(store.nit)} · ${escapeHTML(store.address)} (${escapeHTML(store.neighborhood)})</div>`
+              : ''
+          }
           <div class="receipt-folio">Folio: <strong>${escapeHTML(sale.folio)}</strong></div>
-          <div class="receipt-meta">Fecha: ${escapeHTML(dateStr)}</div>
+          <div class="receipt-meta">Fecha y hora: ${escapeHTML(dateStr)}</div>
           <div class="receipt-meta">Atendido por: ${escapeHTML(sale.seller_name)} (@${escapeHTML(sale.seller_username)})</div>
           <div class="receipt-meta">Método de pago: <strong>${escapeHTML(sale.payment_method_name)}</strong></div>
         </div>
@@ -90,6 +100,19 @@ export function openSaleReceiptModal(sale) {
               : ''
           }
         </div>
+
+        ${
+          tv && tv.photo_data_url
+            ? `
+            <div class="receipt-verification-box">
+              <div class="fieldset-title">Evidencia Fotográfica de Transferencia (${escapeHTML(tv.channel)})</div>
+              <img src="${tv.photo_data_url}" alt="Evidencia de transferencia" class="receipt-verification-img" />
+              <div class="receipt-meta mono">Timestamp captura: ${escapeHTML(tv.timestamp_display || tv.timestamp)}</div>
+            </div>
+          `
+            : ''
+        }
+
         ${sale.notes ? `<div class="receipt-notes">Observación: ${escapeHTML(sale.notes)}</div>` : ''}
       </div>
 

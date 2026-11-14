@@ -118,12 +118,20 @@ class KairoRequestHandler(SimpleHTTPRequestHandler):
             self._handle_api("GET", parsed.path, parse_qs(parsed.query))
             return
 
-        # Bloquear acceso directo a archivos del backend o base de datos desde navegador
-        if parsed.path.startswith("/backend") or parsed.path.startswith("/data"):
+        # Bloquear acceso directo a archivos del backend o base de datos SQLite desde navegador
+        if parsed.path.startswith("/backend") or parsed.path.startswith("/data/"):
             self._send_json({"error": "Acceso restringido."}, status=403)
             return
 
-        # Si solicita una ruta estática existente, servirla; de lo contrario, servir index.html (SPA)
+        # Si solicita /app o /app/, servir /app/index.html (entorno de aplicación POS/Inventario)
+        if parsed.path == "/app" or parsed.path.startswith("/app/"):
+            app_candidate = ROOT_DIR / parsed.path.lstrip("/")
+            if app_candidate.is_file():
+                return super().do_GET()
+            self.path = "/app/index.html"
+            return super().do_GET()
+
+        # Si solicita una ruta estática existente, servirla; de lo contrario, servir index.html (Landing Pública)
         candidate = ROOT_DIR / parsed.path.lstrip("/")
         if parsed.path == "/" or (not candidate.is_file() and "." not in Path(parsed.path).name):
             self.path = "/index.html"

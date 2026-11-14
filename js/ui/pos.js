@@ -13,10 +13,12 @@ import { isBulkUnit, formatQty } from '../utils/quantities.js'
 import { icon } from './icons.js'
 import { openSaleReceiptModal } from './receipt.js'
 import { openDialog } from './dialog.js'
+import { openBarcodeScannerModal, openTransferVerifierModal } from './hardware.js'
 
 const PAYMENT_METHODS = [
   { code: 'efectivo', label: 'Efectivo' },
   { code: 'nequi', label: 'Nequi' },
+  { code: 'bancolombia', label: 'Bancolombia' },
   { code: 'daviplata', label: 'Daviplata' },
 ]
 
@@ -34,7 +36,7 @@ function getFilteredPOSProducts(st) {
 
   return (st.products || []).filter((p) => {
     if (!p.is_active) return false
-    if (cat !== 'ALL' && p.category_id !== cat) return false
+    if (cat !== 'ALL' && String(p.category_id) !== String(cat)) return false
     if (!q) return true
     return (
       String(p.name || '').toLowerCase().includes(q) ||
@@ -45,9 +47,13 @@ function getFilteredPOSProducts(st) {
 }
 
 export function renderPOSViewHTML(st) {
-  const products = getFilteredPOSProducts(st)
+  const allFiltered = getFilteredPOSProducts(st)
+  const limit = st.posSearch ? 120 : st.posVisibleLimit || 60
+  const visibleProducts = allFiltered.slice(0, limit)
+  const remainingCount = Math.max(0, allFiltered.length - visibleProducts.length)
+
   const categories = st.categories || []
-  const { subtotal, total } = calculateCartTotals(st.cart)
+  const { subtotal, total, itemsCount } = calculateCartTotals(st.cart)
 
   const receivedNum =
     st.paymentMethod === 'efectivo' && st.amountReceived !== ''
@@ -59,16 +65,16 @@ export function renderPOSViewHTML(st) {
       : 0
 
   const rowsHTML =
-    products.length === 0
+    visibleProducts.length === 0
       ? `
         <div class="empty-state">
           <p class="empty-title">No hay productos disponibles para este criterio</p>
-          <p class="empty-subtitle">Ajusta el término de búsqueda o verifica que existan productos activos con stock vigente.</p>
+          <p class="empty-subtitle">Ajusta el término de búsqueda o escanea un código de barras válido.</p>
         </div>
       `
       : `
         <div class="pos-catalog-grid">
-          ${products
+          ${visibleProducts
             .map((p) => {
               const avail = Number(p.available_stock || 0)
               const isOut = avail <= 0
@@ -89,11 +95,23 @@ export function renderPOSViewHTML(st) {
                   data-pos-add="${p.id}"
                   ${isOut ? 'disabled' : ''}
                 >
-                  <div class="tile-top">
-                    <span class="tile-sku">${escapeHTML(p.sku)}${p.barcode ? ` · ${escapeHTML(p.barcode)}` : ''}</span>
-                    ${stockBadge}
+                  <div class="tile-top-row">
+                    <div class="tile-thumb-wrap">
+                      ${
+                        p.image_url
+                          ? `<img src="${escapeHTML(p.image_url)}" alt="${escapeHTML(p.name)}" class="tile-thumb-img" loading="lazy" />`
+                          : `<div class="tile-thumb-fallback">${icon('products', 16)}</div>`
+                      }
+                    </div>
+                    <div class="tile-head-meta">
+                      <div class="tile-top">
+                        <span class="tile-sku">${escapeHTML(p.sku)}</span>
+                        ${stockBadge}
+                      </div>
+                      <div class="tile-name">${escapeHTML(p.name)}</div>
+                      <div class="tile-barcode-sub">${escapeHTML(p.category_name || '')} · EAN ${escapeHTML(p.barcode || '—')}</div>
+                    </div>
                   </div>
-                  <div class="tile-name">${escapeHTML(p.name)}</div>
                   <div class="tile-bottom">
                     <div class="tile-price">
                       <strong>${formatCOP(p.sale_price)}</strong>
@@ -112,6 +130,17 @@ export function renderPOSViewHTML(st) {
             })
             .join('')}
         </div>
+        ${
+          remainingCount > 0
+            ? `
+          <div class="catalog-load-more">
+            <button type="button" class="btn btn-outline btn-sm" id="btn-pos-load-more">
+              Mostrar más productos (${remainingCount} restantes de ${allFiltered.length})
+            </button>
+          </div>
+        `
+            : ''
+        }
       `
 
   const cartHTML =
@@ -119,7 +148,7 @@ export function renderPOSViewHTML(st) {
       ? `
         <div class="cart-empty-state">
           <p>Sin artículos en la venta actual</p>
-          <small>Escanea un código de barras o selecciona productos del catálogo.</small>
+          <small>Usa el lector de cámara o selecciona productos del catálogo de 400 referencias.</small>
         </div>
       `
       : st.cart
@@ -175,9 +204,11 @@ export function renderPOSViewHTML(st) {
           })
           .join('')
 
+  const tv = st.transferVerification
+
   return `
     <div class="pos-layout">
-      <!-- Panel Izquierdo: Buscador y Catálogo -->
+      <!-- Panel Izquierdo: Buscador, Escáner de Cámara y Catálogo de 400 Productos -->
       <section class="pos-catalog-panel" aria-label="Catálogo de productos disponibles">
         <header class="panel-toolbar">
           <div class="search-field-wrapper">
@@ -186,15 +217,19 @@ export function renderPOSViewHTML(st) {
               id="pos-search-input"
               type="search"
               value="${escapeHTML(st.posSearch)}"
-              placeholder="Buscar por nombre, SKU o lector de código de barras (Enter)..."
+              placeholder="Buscar en 400 productos por nombre, SKU o código EAN..."
               autocomplete="off"
             />
           </div>
 
           <div class="toolbar-actions">
+            <button type="button" class="btn btn-primary btn-sm" id="btn-pos-barcode-camera" title="Escanear código de barras con la cámara">
+              ${icon('barcode', 15)}
+              <span>Escanear Código</span>
+            </button>
             <button type="button" class="btn btn-outline btn-sm" id="btn-pos-my-sales">
               ${icon('sales', 15)}
-              <span>Mis ventas recientes</span>
+              <span class="hide-on-xs">Mis ventas</span>
             </button>
           </div>
         </header>
@@ -205,14 +240,14 @@ export function renderPOSViewHTML(st) {
             class="filter-chip ${st.posCategory === 'ALL' ? 'active' : ''}"
             data-pos-cat="ALL"
           >
-            Todos
+            Todos (${(st.products || []).filter((p) => p.is_active).length})
           </button>
           ${categories
             .map(
               (c) => `
               <button
                 type="button"
-                class="filter-chip ${st.posCategory === c.id ? 'active' : ''}"
+                class="filter-chip ${String(st.posCategory) === String(c.id) ? 'active' : ''}"
                 data-pos-cat="${c.id}"
               >
                 ${escapeHTML(c.name)}
@@ -227,18 +262,23 @@ export function renderPOSViewHTML(st) {
         </div>
       </section>
 
-      <!-- Panel Derecho: Ticket y Cobro -->
-      <aside class="pos-ticket-panel" aria-label="Ticket de venta">
+      <!-- Panel Derecho: Ticket, Verificador de Transferencias y Cobro -->
+      <aside class="pos-ticket-panel ${st.mobileTicketOpen ? 'mobile-drawer-open' : ''}" aria-label="Ticket de venta">
         <header class="ticket-header">
           <div>
             <h2 class="ticket-title">Orden de Venta</h2>
             <span class="ticket-subtitle">Salida automática por lote (FEFO / FIFO)</span>
           </div>
-          ${
-            st.cart.length > 0
-              ? `<button type="button" class="btn btn-ghost btn-xs" id="btn-pos-clear-cart">Limpiar</button>`
-              : ''
-          }
+          <div class="header-actions-group">
+            ${
+              st.cart.length > 0
+                ? `<button type="button" class="btn btn-ghost btn-xs" id="btn-pos-clear-cart">Limpiar</button>`
+                : ''
+            }
+            <button type="button" class="btn-icon mobile-only-close" id="btn-close-mobile-ticket" aria-label="Cerrar ticket">
+              ${icon('close', 16)}
+            </button>
+          </div>
         </header>
 
         <div class="ticket-lines-container">
@@ -247,7 +287,19 @@ export function renderPOSViewHTML(st) {
 
         <footer class="ticket-footer">
           <div class="payment-selector">
-            <span class="section-micro-label">Método de pago</span>
+            <div class="payment-header-row">
+              <span class="section-micro-label">Método de pago</span>
+              <button
+                type="button"
+                class="btn btn-outline btn-xs"
+                id="btn-verify-transfer"
+                title="Capturar foto de transferencia Nequi o Bancolombia con la cámara trasera"
+              >
+                ${icon('camera', 13)}
+                <span>Verificar Transferencia</span>
+              </button>
+            </div>
+
             <div class="payment-Segmented">
               ${PAYMENT_METHODS.map(
                 (pm) => `
@@ -262,6 +314,23 @@ export function renderPOSViewHTML(st) {
               ).join('')}
             </div>
           </div>
+
+          ${
+            tv
+              ? `
+              <div class="transfer-verified-card">
+                <img src="${tv.photo_data_url}" alt="Evidencia transferencia" class="transfer-thumb-mini" />
+                <div class="transfer-verified-info">
+                  <strong>Transferencia ${escapeHTML(tv.channel)} verificada</strong>
+                  <span class="mono">${escapeHTML(tv.timestamp_display)}</span>
+                </div>
+                <button type="button" class="btn-icon btn-icon-subtle" id="btn-remove-transfer-verif" title="Quitar evidencia">
+                  ${icon('close', 13)}
+                </button>
+              </div>
+            `
+              : ''
+          }
 
           ${
             st.paymentMethod === 'efectivo' && st.cart.length > 0
@@ -297,7 +366,7 @@ export function renderPOSViewHTML(st) {
 
           <div class="ticket-summary">
             <div class="summary-row">
-              <span>Subtotal</span>
+              <span>Subtotal (${itemsCount} líneas)</span>
               <span>${formatCOP(subtotal)}</span>
             </div>
             <div class="summary-row total">
@@ -328,6 +397,18 @@ export function renderPOSViewHTML(st) {
           }
         </footer>
       </aside>
+
+      <!-- Barra Fija Mobile-First para el Tendero en Celular -->
+      <div class="mobile-pos-bottom-bar" id="mobile-pos-bar">
+        <button type="button" class="btn btn-outline btn-sm" id="btn-mobile-scan">
+          ${icon('barcode', 16)}
+          <span>Escanear</span>
+        </button>
+        <button type="button" class="btn btn-primary btn-mobile-ticket" id="btn-open-mobile-ticket">
+          ${icon('cart', 16)}
+          <span>Ticket (${itemsCount}) · ${formatCOP(total)}</span>
+        </button>
+      </div>
     </div>
   `
 }
@@ -345,7 +426,6 @@ export function bindPOSViewEvents(root, refreshCatalogAndContext) {
     }
   })
 
-  // Soporte para lector de códigos de barras USB (emula teclado + Enter)
   searchInput?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault()
@@ -377,9 +457,39 @@ export function bindPOSViewEvents(root, refreshCatalogAndContext) {
     }
   })
 
+  root.querySelector('#btn-pos-barcode-camera')?.addEventListener('click', () => {
+    openBarcodeScannerModal()
+  })
+
+  root.querySelector('#btn-mobile-scan')?.addEventListener('click', () => {
+    openBarcodeScannerModal()
+  })
+
+  root.querySelector('#btn-open-mobile-ticket')?.addEventListener('click', () => {
+    setState({ mobileTicketOpen: !getState().mobileTicketOpen })
+  })
+
+  root.querySelector('#btn-close-mobile-ticket')?.addEventListener('click', () => {
+    setState({ mobileTicketOpen: false })
+  })
+
+  root.querySelector('#btn-verify-transfer')?.addEventListener('click', () => {
+    const { total } = calculateCartTotals(getState().cart)
+    openTransferVerifierModal(total)
+  })
+
+  root.querySelector('#btn-remove-transfer-verif')?.addEventListener('click', () => {
+    setState({ transferVerification: null })
+  })
+
+  root.querySelector('#btn-pos-load-more')?.addEventListener('click', () => {
+    const cur = getState().posVisibleLimit || 60
+    setState({ posVisibleLimit: cur + 80 })
+  })
+
   root.querySelectorAll('[data-pos-cat]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      setState({ posCategory: btn.getAttribute('data-pos-cat') })
+      setState({ posCategory: btn.getAttribute('data-pos-cat'), posVisibleLimit: 60 })
     })
   })
 
@@ -440,12 +550,20 @@ export function bindPOSViewEvents(root, refreshCatalogAndContext) {
   })
 
   root.querySelector('#btn-pos-clear-cart')?.addEventListener('click', () => {
-    setState({ cart: [], amountReceived: '' })
+    setState({ cart: [], amountReceived: '', transferVerification: null })
   })
 
   root.querySelectorAll('[data-pos-pay]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      setState({ paymentMethod: btn.getAttribute('data-pos-pay') })
+      const method = btn.getAttribute('data-pos-pay')
+      setState({ paymentMethod: method })
+      if (method === 'nequi' || method === 'bancolombia') {
+        const st = getState()
+        if (st.cart.length > 0 && !st.transferVerification) {
+          const { total } = calculateCartTotals(st.cart)
+          openTransferVerifierModal(total)
+        }
+      }
     })
   })
 
@@ -515,6 +633,7 @@ export async function submitCurrentSale(refreshCatalogAndContext) {
         st.paymentMethod === 'efectivo' && st.amountReceived !== ''
           ? Number(st.amountReceived)
           : total,
+      transfer_verification: st.transferVerification || null,
       items: st.cart.map((c) => ({
         product_id: c.product_id,
         quantity: c.quantity,
@@ -528,6 +647,8 @@ export async function submitCurrentSale(refreshCatalogAndContext) {
       {
         cart: [],
         amountReceived: '',
+        transferVerification: null,
+        mobileTicketOpen: false,
         lastCompletedSale: sale,
       },
       false
@@ -562,7 +683,10 @@ function openMyRecentSalesModal(salesList) {
               <tr>
                 <td><strong>${escapeHTML(s.folio)}</strong></td>
                 <td>${escapeHTML(dt)}</td>
-                <td><span class="status-badge badge-neutral">${escapeHTML(s.payment_method_name)}</span></td>
+                <td>
+                  <span class="status-badge badge-neutral">${escapeHTML(s.payment_method_name)}</span>
+                  ${s.transfer_verification ? `<span class="status-badge badge-success">Foto verificada</span>` : ''}
+                </td>
                 <td class="num"><strong>${formatCOP(s.total)}</strong></td>
                 <td class="actions-cell">
                   <button type="button" class="btn btn-outline btn-xs" data-view-receipt="${s.id}">Comprobante</button>

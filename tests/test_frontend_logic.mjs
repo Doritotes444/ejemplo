@@ -1,6 +1,8 @@
 /**
- * Pruebas Automatizadas de Lógica Frontend (Carrito POS, Cantidades Fraccionarias,
- * Permisos de Rutas SPA y Utilidades Monetarias).
+ * Pruebas Automatizadas de Lógica Frontend:
+ * - Semilla de 400 Productos en COP e imágenes vía URL remota (db.js)
+ * - Carrito POS, Cantidades Fraccionarias, Cambio y Permisos RBAC
+ * - Métricas Rápidas del Dueño y Ordenamiento FEFO/FIFO de Lotes
  */
 
 import {
@@ -11,11 +13,22 @@ import {
 } from '../js/state.js'
 import { isRouteAllowed } from '../js/core/permissions.js'
 import { calculateChange, formatCOP } from '../js/utils/money.js'
+import { SEED_PRODUCTS, SEED_CATEGORIES } from '../js/data/db.js'
+import { computeOwnerQuickMetrics, sortSellableLotsFEFO } from '../js/core/localStore.js'
 
 function assert(condition, message) {
   if (!condition) {
     throw new Error(`Fallo en prueba: ${message}`)
   }
+}
+
+// 0. Verificación de la Base de Datos Semilla (400 Productos Reales en COP)
+assert(SEED_PRODUCTS.length === 400, `Se esperaban 400 productos, se encontraron ${SEED_PRODUCTS.length}`)
+assert(SEED_CATEGORIES.length === 3, 'Existen las 3 categorías principales (Abarrotes, Víveres, Papelería)')
+for (const p of SEED_PRODUCTS) {
+  assert(Number(p.sale_price) >= 400, `Precio COP válido para ${p.name}`)
+  assert(String(p.image_url).startsWith('https://'), `URL remota de imagen para ${p.name}`)
+  assert(String(p.barcode).startsWith('770'), `Código EAN-13 colombiano para ${p.name}`)
 }
 
 const sampleProduct = {
@@ -71,4 +84,19 @@ assert(isRouteAllowed(tenderoUser, 'users') === false, 'Tendero NO puede acceder
 assert(isRouteAllowed(duenoUser, 'users') === true, 'Dueño puede acceder a usuarios')
 assert(isRouteAllowed(duenoUser, 'lots') === true, 'Dueño puede acceder a lotes')
 
-console.log('OK: Todas las pruebas de frontend (Carrito, Granel, Cambio y RBAC SPA) pasaron.')
+// 4. Ordenamiento FEFO / FIFO y Métricas Rápidas del Dueño
+const sortedLots = sortSellableLotsFEFO(
+  [
+    { id: 'l1', available_quantity: 5, entry_date: '2026-10-01', expiration_date: '2027-08-01' },
+    { id: 'l2', available_quantity: 5, entry_date: '2026-10-15', expiration_date: '2027-02-01' },
+    { id: 'l3', available_quantity: 5, entry_date: '2025-01-01', expiration_date: '2025-06-01' }, // Vencido
+  ],
+  '2026-11-14'
+)
+assert(sortedLots.length === 2, 'Excluye lotes vencidos')
+assert(sortedLots[0].id === 'l2', 'Prioriza FEFO (vence primero l2)')
+
+const metrics = computeOwnerQuickMetrics(SEED_PRODUCTS, [])
+assert(metrics.low_stock_count > 0, 'Detecta productos con alerta de bajo stock en el catálogo semilla')
+
+console.log('OK: Todas las pruebas de frontend (400 Productos COP, Carrito, FEFO/FIFO, Métricas Rápidas y RBAC) pasaron.')

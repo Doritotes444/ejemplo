@@ -1,39 +1,43 @@
-import { apiRequest, setStoredToken } from './api.js'
+import {
+  getStoredProfileSync,
+  getActiveSessionSync,
+  setActiveSessionSync,
+  registerStoreOnboarding,
+  authenticateLocalUser,
+  ensureSeed400Products,
+} from './localStore.js'
 
 /**
- * Gestión de Autenticación y Sesión con el Backend Real.
+ * Gestión de Autenticación, Onboarding de Tienda y Sesión en LocalStorage / IndexedDB.
  */
 
 export async function fetchAuthStatus() {
-  return apiRequest('/api/auth/status')
+  const profile = getStoredProfileSync()
+  const activeUser = getActiveSessionSync()
+  if (profile) {
+    await ensureSeed400Products()
+  }
+  return {
+    initialized: Boolean(profile),
+    needs_setup: !profile,
+    store_profile: profile,
+    user: activeUser ? { ...activeUser, store: profile } : null,
+  }
 }
 
 export async function setupOwnerAccount(payload) {
-  const data = await apiRequest('/api/auth/setup', {
-    method: 'POST',
-    body: payload,
-  })
-  if (data?.token) {
-    setStoredToken(data.token)
+  const { profile, user } = await registerStoreOnboarding(payload)
+  return {
+    store_profile: profile,
+    user,
   }
-  return data
 }
 
 export async function loginWithCredentials(username, password) {
-  const data = await apiRequest('/api/auth/login', {
-    method: 'POST',
-    body: { username, password },
-  })
-  if (data?.token) {
-    setStoredToken(data.token)
-  }
-  return data
+  const user = await authenticateLocalUser(username, password)
+  return { user }
 }
 
 export async function logoutSession() {
-  try {
-    await apiRequest('/api/auth/logout', { method: 'POST' })
-  } finally {
-    setStoredToken('')
-  }
+  setActiveSessionSync(null)
 }

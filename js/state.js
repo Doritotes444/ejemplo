@@ -8,25 +8,33 @@ import { roundQty, clampQty, isBulkUnit } from './utils/quantities.js'
 const state = {
   booting: true,
   initialized: false,
+  storeProfile: null,
   user: null,
   route: 'pos',
 
-  // Datos cargados desde el servidor
+  // Datos cargados desde IndexedDB
   categories: [],
   products: [],
   lots: [],
   movements: [],
   sales: [],
-  salesSummary: { count: 0, grand_total: 0, by_payment_method: { efectivo: 0, nequi: 0, daviplata: 0 } },
+  salesSummary: {
+    count: 0,
+    grand_total: 0,
+    by_payment_method: { efectivo: 0, nequi: 0, bancolombia: 0, daviplata: 0 },
+  },
   users: [],
 
-  // Estado operativo del POS
+  // Estado operativo del POS y Hardware
   cart: [],
   posSearch: '',
   posCategory: 'ALL',
+  posVisibleLimit: 60,
   paymentMethod: 'efectivo',
   amountReceived: '',
   saleNotes: '',
+  transferVerification: null,
+  mobileTicketOpen: false,
   lastCompletedSale: null,
 
   // Filtros en vistas de Dueño

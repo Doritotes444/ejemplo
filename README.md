@@ -1,122 +1,129 @@
-# Kairo — Sistema de Inventario y Punto de Venta (POS)
+# Kairo — Sistema POS, Inventario FEFO/FIFO y Verificación por Cámara
 
-Sistema comercial de Punto de Venta (POS), gestión de inventario, control de lotes por vencimiento (**FEFO / FIFO**) y administración de usuarios con autorización real en servidor.
-
-Construido bajo una arquitectura minimalista y sin dependencias innecesarias:
-- **Frontend:** SPA en **HTML5, CSS3, JavaScript Vanilla (ES6+ Modules) e iconografía SVG** propia.
-- **Backend:** Servidor HTTP transaccional en **Python 3.12** con persistencia relacional en **SQLite 3 (`WAL` + `FOREIGN KEYS = ON`)**, hashing de contraseñas **PBKDF2-HMAC-SHA256** (260.000 iteraciones) y sesiones persistentes validadas en cada solicitud.
+Plataforma comercial **Mobile-First** de Punto de Venta (POS) y Gestión de Inventario por Lotes desarrollada íntegramente en **HTML5, CSS3 y Vanilla JavaScript (ES6+ Modules)** con persistencia local estructurada en **IndexedDB + LocalStorage** (y servidor HTTP integrado en Python).
 
 ---
 
-## 1. Filosofía e Identidad Visual
+## 1. Arquitectura de Entornos Separados (`/` vs `/app`)
 
-- **Minimalismo funcional:** Inspirado en herramientas de ingeniería de alta precisión (Linear, Vercel, Raycast). Tipografía con números tabulares (`tabular-nums`), bordes definidos de `1px`, radios moderados (`4px`–`8px`), cero emojis y cero elementos decorativos superfluos.
-- **Identidad original (`Kairo`):** Logotipo vectorial SVG ([assets/icons/logo.svg](file:///C:/Users/doria/.gemini/antigravity/scratch/tiendapp/assets/icons/logo.svg)) y favicon SVG ([assets/icons/favicon.svg](file:///C:/Users/doria/.gemini/antigravity/scratch/tiendapp/assets/icons/favicon.svg)) integrados en la pantalla de acceso y en la barra de navegación.
-- **Modo Oscuro y Claro nativo:** Detección inicial del sistema operativo (`prefers-color-scheme`) y persistencia de la preferencia del usuario.
+El proyecto separa estrictamente el entorno público de captación y registro del entorno operativo de la aplicación:
 
----
-
-## 2. Roles Operativos y Control de Acceso Real
-
-El sistema contempla exclusivamente **dos roles operativos**, protegidos tanto en la interfaz SPA como en cada endpoint del backend ([backend/security.py](file:///C:/Users/doria/.gemini/antigravity/scratch/tiendapp/backend/security.py)):
-
-| Módulo / Operación | Tendero (`tendero`) | Dueño (`dueno`) |
-| :--- | :---: | :---: |
-| Punto de Venta (POS), búsqueda por nombre/SKU/código de barras y carrito | Sí | Sí |
-| Registro de ventas (`Efectivo`, `Nequi`, `Daviplata`) y cálculo de cambio | Sí | Sí |
-| Generación e impresión de comprobantes de venta | Sí | Sí |
-| Consulta de sus propias ventas operativas en el POS | Sí | Sí |
-| Historial global de ventas con filtros por fecha, producto, usuario y método | No (403) | Sí |
-| Creación, edición y activación/desactivación de productos y categorías | No (403) | Sí |
-| Gestión de lotes (`FEFO / FIFO`), fechas de ingreso y fechas de vencimiento | No (403) | Sí |
-| Registro de entradas, salidas por merma, ajustes y consulta de Kardex | No (403) | Sí |
-| Creación de usuarios (`Tendero` / `Dueño`) y activación/desactivación | No (403) | Sí |
-
-- **Interfaz limpia para el Tendero:** Al iniciar sesión como `Tendero`, la aplicación muestra únicamente el terminal de Punto de Venta. No existen pestañas administrativas ocultas ni botones deshabilitados.
+| Ruta | Archivo Principal | Propósito |
+| :--- | :--- | :--- |
+| `/` | `index.html` + `js/landing.js` + `css/landing.css` | **Landing Page Pública y Onboarding de Creación de Tienda.** Si detecta que el usuario ya registró su tienda o tiene sesión activa en `LocalStorage` / `IndexedDB`, redirige automáticamente a `/app/` (salvo que se visite con `/?stay=1`). |
+| `/app/` | `app/index.html` + `js/app.js` + `css/app.css` | **Aplicación SPA Operativa (POS, Inventario, Lotes FEFO/FIFO, Kardex, Ventas y Usuarios).** |
+| `/db.js` y `/data.json` | `db.js`, `js/data/db.js`, `data.json` | **Catálogo Semilla de 400 Productos Reales** en Pesos Colombianos (COP). |
 
 ---
 
-## 3. Estructura del Proyecto
+## 2. Funcionalidades Principales
+
+### 2.1. Onboarding y Creación de Tienda
+El flujo de registro solicita los datos legales y de ubicación del establecimiento comercial:
+- **NIT del establecimiento** (ej. `901.482.310-4`)
+- **Nombre del dueño** (ej. `Carlos Mendoza`)
+- **Documento de identidad (C.C.)** (ej. `1020784512`)
+- **Nombre del local** (ej. `Autoservicio y Papelería El Vecino`)
+- **Dirección** (ej. `Calle 45 # 18-22`)
+- **Barrio** (ej. `Chapinero Central`)
+
+Al completar el formulario (desde la Landing Page en `/` o desde `/app/`), el sistema registra el establecimiento en `LocalStorage` (`kairo_store_profile_v3`) e `IndexedDB` (`kairo_pos_idb_v3`), siembra automáticamente los **400 productos** con sus lotes de apertura e inicia la sesión del **Dueño**.
+
+### 2.2. Base de Datos Realista de 400 Productos en COP (`db.js` / `data.json`)
+- **160 productos de Abarrotes:** Aceites, cafés, chocolatería, enlatados, pastas, harinas, salsas, snacks, galletas, aseo del hogar y cuidado personal.
+- **140 productos de Víveres:** Arroz, granos (frijol, lenteja, garbanzo), azúcar, panela, lácteos, huevos, carnes frías, panadería y bebidas.
+- **100 productos de Papelería:** Cuadernos cosidos y argollados, bolígrafos, lápices, colores, marcadores, borradores, pegantes, cintas, resmas de papel, carpetas, blocos y calculadoras.
+- **Precios reales en Pesos Colombianos (COP)** y códigos de barras **EAN-13 (`770...`)**.
+- **Imágenes dinámicas vía URL remota:** Generadas dinámicamente por categoría y semilla (`https://picsum.photos/seed/kairo-{categoria}-{id}/240/240`) con soporte complementario para `FakeStore API`, sin almacenar imágenes locales en el repositorio.
+
+### 2.3. Integración de Hardware (Cámara y Escáner)
+1. **Lector de Código de Barras (`html5-qrcode` vía CDN):**
+   - Disponible desde el botón **Escanear Código** en la barra superior del POS y en la barra inferior móvil (`js/ui/hardware.js`).
+   - Activa la cámara trasera del celular (`facingMode: "environment"`), decodifica códigos EAN-13 / QR y agrega automáticamente el producto al ticket de venta con confirmación sonora (Web Audio API).
+   - Incluye selector de prueba rápida e ingreso directo de código EAN para equipos de escritorio sin cámara física.
+2. **Verificador de Pagos (Nequi / Bancolombia) — Módulo "Verificar Transferencia":**
+   - Al seleccionar transferencia (**Nequi** o **Bancolombia**) o pulsar **Verificar Transferencia**, abre la cámara trasera del dispositivo mediante `navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } } })`.
+   - Captura el frame de video en vivo dentro de un elemento `<canvas>`, estampa en la franja inferior la **fecha y hora exacta (`timestamp` ISO y hora local `es-CO`)**, la entidad, el monto en COP y el NIT del local, y guarda la evidencia fotográfica (`photo_data_url`) junto con el `timestamp` directamente en el registro de la venta en `IndexedDB`.
+
+### 2.4. Valor Agregado: Métricas Rápidas del Dueño y Diseño Mobile-First
+- **Panel de "Métricas Rápidas" (Exclusivo Dueño):**
+  1. **Ventas del Día:** Total vendido hoy en COP, cantidad de operaciones del día y número de transferencias verificadas con fotografía.
+  2. **Producto Más Vendido:** Identificación en tiempo real del artículo con mayor rotación en unidades e ingresos.
+  3. **Alerta de Bajo Stock:** Contador de productos con stock disponible `<= stock_minimo` o agotados, con acceso directo al Kardex y reabastecimiento de lotes.
+- **Interfaz Mobile-First Responsive:**
+  - Barra inferior fija en dispositivos móviles (`<= 900px`) con acceso a un toque para **Escanear Código** y desplegar el **Ticket de Venta** tipo *bottom sheet*, diseñada para que el tendero opere cómodamente desde su teléfono celular.
+- **Persistencia de Modo Oscuro / Claro:**
+  - Detección inicial del sistema operativo y selector persistente en `LocalStorage` tanto en la Landing Page (`/`) como en la aplicación (`/app/`).
+
+---
+
+## 3. Roles y Credenciales Operativas
+
+Una vez completado el Onboarding de la tienda, el sistema habilita dos perfiles con separación estricta de interfaz y rutas:
+
+| Rol | Usuario por defecto | Contraseña por defecto | Permisos |
+| :--- | :--- | :--- | :--- |
+| **Dueño** | `dueno` | `Password2026!` | Acceso completo: Panel de Métricas Rápidas, POS, Catálogo de 400 Productos, Lotes FEFO/FIFO, Inventario/Kardex, Historial de Ventas con evidencia fotográfica y Usuarios. |
+| **Tendero** | `tendero` | `Tendero2026!` | Interfaz bloqueada exclusivamente al **Punto de Venta (`#/pos`)**: búsqueda, escáner de cámara, verificador de transferencias Nequi/Bancolombia y registro de ventas. |
+
+---
+
+## 4. Estructura del Proyecto
 
 ```text
-├── assets/
-│   └── icons/
-│       ├── favicon.svg              # Favicon vectorial original
-│       └── logo.svg                 # Logotipo vectorial Kairo
-├── backend/
-│   ├── migrations/
-│   │   └── 001_initial_schema.sql   # Esquema relacional normalizado (10 tablas)
-│   ├── database.py                  # Conexión SQLite3, WAL, migraciones y transacciones ACID
-│   ├── security.py                  # PBKDF2-HMAC-SHA256, sesiones persistentes y RBAC
-│   ├── services.py                  # Reglas de negocio, FEFO/FIFO, Kardex y ventas atómicas
-│   └── server.py                    # Servidor HTTP (API REST JSON + SPA estática)
+├── index.html                  # Entorno Público: Landing Page + Onboarding (redirige a /app si hay sesión)
+├── app/
+│   └── index.html              # Entorno de Aplicación: SPA POS & Inventario + CDN html5-qrcode
+├── db.js                       # Base de datos semilla ES6 con 400 productos reales en COP
+├── data.json                   # Base de datos semilla JSON con 400 productos reales en COP
 ├── css/
-│   ├── theme.css                    # Variables de diseño para modo claro y oscuro
-│   ├── base.css                     # Reset tipográfico, controles y números tabulares
-│   └── app.css                      # Layout POS, tablas densas, diálogos y comprobante imprimible
-├── docs/
-│   └── ARQUITECTURA.md              # Documentación del modelo de datos, seguridad y API
+│   ├── theme.css               # Variables semánticas Modo Oscuro y Modo Claro
+│   ├── base.css                # Reset tipográfico y controles base
+│   ├── landing.css             # Estilos Mobile-First de la Landing Page y Onboarding
+│   └── app.css                 # Estilos Mobile-First del POS, Métricas Rápidas y Modales de Cámara
 ├── js/
-│   ├── app.js                       # Punto de entrada de la SPA
-│   ├── state.js                     # Estado centralizado y lógica del carrito POS
+│   ├── landing.js              # Lógica de redirección automática, tema y Onboarding en Landing Page
+│   ├── app.js                  # Inicializador de la SPA en /app
+│   ├── state.js                # Estado reactivo y lógica pura del carrito POS
+│   ├── data/
+│   │   └── db.js               # Módulo de 400 productos (Abarrotes, Víveres y Papelería)
 │   ├── core/
-│   │   ├── api.js                   # Cliente HTTP autenticado y manejo de errores
-│   │   ├── permissions.js           # Reglas de visibilidad y rutas por rol
-│   │   ├── router.js                # Enrutador SPA sin recarga de página
-│   │   ├── session.js               # Flujo de inicialización, login y logout
-│   │   └── theme.js                 # Detección y persistencia de tema Claro / Oscuro
-│   ├── services/
-│   │   ├── products.js              # Consumo de API de productos y categorías
-│   │   ├── lots.js                  # Consumo de API de lotes y ajustes
-│   │   ├── inventory.js             # Consumo de API de movimientos (Kardex)
-│   │   ├── sales.js                 # Consumo de API de ventas e idempotencia
-│   │   └── users.js                 # Consumo de API de usuarios
+│   │   ├── localStore.js       # Motor IndexedDB + LocalStorage (FEFO/FIFO, Ventas, Onboarding, Métricas)
+│   │   ├── permissions.js      # Control de acceso por rol (Dueño vs Tendero)
+│   │   ├── router.js           # Enrutador SPA con guardias de ruta
+│   │   ├── session.js          # Gestión de sesión activa y Onboarding
+│   │   └── theme.js            # Persistencia de tema oscuro/claro
+│   ├── services/               # Servicios desacoplados de Productos, Lotes, Inventario, Ventas y Usuarios
 │   ├── ui/
-│   │   ├── icons.js                 # Sistema de iconografía SVG y marca
-│   │   ├── shell.js                 # Marco principal de la SPA y atajos de teclado
-│   │   ├── login.js                 # Inicio de sesión e inicialización del primer Dueño
-│   │   ├── pos.js                   # Terminal de Punto de Venta
-│   │   ├── lots.js                  # Módulos administrativos del Dueño (Productos, Lotes, Kardex, Ventas, Usuarios)
-│   │   ├── receipt.js               # Comprobante de venta imprimible
-│   │   └── dialog.js                # Gestor de diálogos modales
-│   └── utils/
-│       ├── money.js                 # Formato monetario COP y cálculo de cambio
-│       ├── quantities.js            # Cantidades enteras y a granel (3 decimales)
-│       └── validation.js            # Validaciones de fechas y formularios
-├── tests/
-│   ├── test_backend_api.py          # Pruebas de integración del servidor, RBAC, FEFO y transacciones
-│   └── test_frontend_logic.mjs      # Pruebas unitarias de estado, carrito y permisos SPA
-└── index.html                       # Documento único de la aplicación
+│   │   ├── hardware.js         # Escáner de cámara (html5-qrcode) y Verificador Nequi/Bancolombia (<canvas>)
+│   │   ├── shell.js            # Cabecera, navegación por rol y Panel de Métricas Rápidas del Dueño
+│   │   ├── pos.js              # Punto de Venta Mobile-First con imágenes remotas y cobro
+│   │   ├── lots.js             # Vistas administrativas de Productos, Lotes FEFO/FIFO, Kardex, Ventas y Usuarios
+│   │   ├── receipt.js          # Comprobante imprimible con foto de transferencia y timestamp
+│   │   ├── login.js            # Onboarding de tienda y selector de sesión en /app
+│   │   ├── dialog.js           # Sistema de modales accesibles
+│   │   └── icons.js            # Logotipo e iconografía vectorial SVG propia
+│   └── utils/                  # Formateo COP, cantidades fraccionarias y validaciones
+├── backend/
+│   └── server.py               # Servidor HTTP local que sirve /, /app/ y endpoints REST
+└── tests/
+    ├── test_frontend_logic.mjs # Suite de pruebas de 400 productos, carrito, FEFO/FIFO, métricas y RBAC
+    └── test_backend_api.py     # Suite de pruebas del servidor HTTP
 ```
 
 ---
 
-## 4. Ejecución e Inicialización Segura
+## 5. Ejecución y Pruebas
 
-### Requisitos
-- **Python 3.11+** (no requiere instalar paquetes externos con `pip`; utiliza `sqlite3`, `hashlib`, `secrets` y `http.server` de la biblioteca estándar).
+1. **Iniciar el servidor local:**
+   ```bash
+   python backend/server.py
+   ```
+   - Landing Page y Onboarding: `http://127.0.0.1:8080/`
+   - Panel POS e Inventario: `http://127.0.0.1:8080/app/`
 
-### Iniciar el Servidor
-```bash
-python backend/server.py
-```
-El servidor aplica automáticamente las migraciones SQL sobre `data/kairo_pos.sqlite3` y queda activo en `http://127.0.0.1:8080`.
-
-### Creación del Primer Usuario Dueño
-1. Al abrir `http://127.0.0.1:8080` por primera vez, el sistema detecta que no existen usuarios registrados y presenta el formulario de **Inicialización del Sistema** (`POST /api/auth/setup`).
-2. Define el nombre completo, usuario y contraseña (mínimo 8 caracteres) del **Dueño** principal. No existen contraseñas predeterminadas ni usuarios ficticios precargados.
-3. Una vez inicializado, el endpoint `/api/auth/setup` queda bloqueado permanentemente (`409 Conflict`).
-
----
-
-## 5. Pruebas Automatizadas
-
-Ejecutar las pruebas de integración del backend (autenticación, RBAC estricto, salida de lotes FEFO/FIFO, bloqueo de vencidos y atomicidad de ventas):
-```bash
-python tests/test_backend_api.py
-```
-
-Ejecutar las pruebas de lógica del frontend (carrito, granel, cambio y control de rutas):
-```bash
-node tests/test_frontend_logic.mjs
-```
+2. **Ejecutar las pruebas automatizadas:**
+   ```bash
+   node tests/test_frontend_logic.mjs
+   python tests/test_backend_api.py
+   ```

@@ -1,26 +1,17 @@
-import { apiRequest } from '../core/api.js'
-
-/**
- * Servicio de Administración de Usuarios (Exclusivo Dueño).
- */
+import {
+  getUsersLocal,
+  createUserLocal,
+  updateUserLocal,
+} from '../core/localStore.js'
 
 export async function fetchUsers() {
-  const res = await apiRequest('/api/users')
-  return res.users || []
+  return getUsersLocal()
 }
 
 export async function createUserRequest(payload) {
-  const res = await apiRequest('/api/users', {
-    method: 'POST',
-    body: payload,
-  })
-  return res.user
+  return createUserLocal(payload)
 }
 
 export async function updateUserRequest(userId, payload) {
-  const res = await apiRequest(`/api/users/${encodeURIComponent(userId)}`, {
-    method: 'PUT',
-    body: payload,
-  })
-  return res.user
+  return updateUserLocal(userId, payload)
 }
