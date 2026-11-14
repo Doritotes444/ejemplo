@@ -83,6 +83,9 @@ ejemplo/
 │       └── images.js           # Compresión Canvas JPEG y placeholders SVG
 ├── docs/
 │   └── ARQUITECTURA.md         # Modelo de datos y especificación técnica FIFO
+├── landing/
+│   ├── index.html              # Landing page optimizada para SEO ('inventario software')
+│   └── style.css               # Estilos accesibles, tabla de planes, tutoriales y switch dark mode
 └── tests/
     ├── runner.html             # Ejecutor visual de pruebas en el navegador
     ├── cart.test.js            # Pruebas de carrito y cantidades fraccionarias

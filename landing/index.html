@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Inventario Software Fácil de Usar para Tiendas y Negocios | Tiendapp</title>
+  <meta
+    name="description"
+    content="El inventario software más fácil de usar para tiendas de barrio, minimercados y empresas. Controla tus ventas, lotes FIFO y ganancias en 3 toques. Prueba gratuita de 15 días."
+  />
+  <meta
+    name="keywords"
+    content="inventario software, software de inventario fácil, control de inventario para tiendas, punto de venta sencillo, lotes FIFO"
+  />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://doritotes444.github.io/ejemplo/landing/" />
+
+  <!-- Open Graph / Redes Sociales -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Inventario Software Fácil de Usar | Tiendapp" />
+  <meta
+    property="og:description"
+    content="El inventario software pensado para personas reales: letras grandes, cero complicaciones y control exacto de tu mercancía. Prueba gratuita de 15 días."
+  />
+  <link rel="icon" type="image/svg+xml" href="../assets/icons/favicon.svg" />
+  <link rel="stylesheet" href="./style.css" />
+
+  <!-- Datos Estructurados Schema.org para SEO ('inventario software') -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Tiendapp — Inventario Software Fácil",
+    "applicationCategory": "BusinessApplication",
+    "operatingSystem": "Web, Windows, Android, iOS",
+    "description": "Inventario software fácil de usar con punto de venta rápido y control de lotes FIFO para tiendas y empresas.",
+    "offers": [
+      {
+        "@type": "Offer",
+        "name": "Plan Tienda",
+        "price": "29900",
+        "priceCurrency": "COP"
+      },
+      {
+        "@type": "Offer",
+        "name": "Plan Empresa",
+        "price": "69900",
+        "priceCurrency": "COP"
+      }
+    ]
+  }
+  </script>
+</head>
+<body>
+  <!-- Barra de Navegación Accesible -->
+  <header class="site-header">
+    <div class="container header-inner">
+      <a href="#inicio" class="brand" aria-label="Tiendapp Inicio">
+        <span class="brand-mark" aria-hidden="true">T</span>
+        <div class="brand-text">
+          <strong>Tiendapp</strong>
+          <span>Inventario Software Fácil</span>
+        </div>
+      </a>
+
+      <nav class="main-nav" aria-label="Navegación principal">
+        <a href="#beneficios">Beneficios</a>
+        <a href="#tutoriales">Guía Paso a Paso</a>
+        <a href="#precios">Planes y Precios</a>
+        <a href="../index.html" class="nav-pos-link">Ir al POS →</a>
+      </nav>
+
+      <!-- Switch interactivo para probar el Modo Oscuro ahí mismo -->
+      <div class="header-actions">
+        <button
+          type="button"
+          id="theme-toggle-btn"
+          class="theme-switch"
+          role="switch"
+          aria-checked="false"
+          aria-label="Cambiar entre modo claro y modo oscuro"
+        >
+          <span class="switch-track">
+            <span class="switch-icon sun" aria-hidden="true">☀️</span>
+            <span class="switch-icon moon" aria-hidden="true">🌙</span>
+            <span class="switch-thumb"></span>
+          </span>
+          <span class="switch-label" id="theme-switch-text">Modo Oscuro</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main id="inicio">
+    <!-- HERO: Título atractivo + Propuesta de valor + CTA 15 días -->
+    <section class="hero-section" aria-labelledby="hero-heading">
+      <div class="container hero-grid">
+        <div class="hero-copy">
+          <span class="seo-pill">✨ El <strong>inventario software</strong> sin enredos ni letras pequeñas</span>
+          <h1 id="hero-heading">
+            El <span>Inventario Software</span> más fácil de usar: vende y controla tu negocio en 3 segundos
+          </h1>
+          <p class="hero-lead">
+            Olvídate de los cuadernos tachados y los programas complicados. Con <strong>Tiendapp</strong> sabes exactamente qué tienes en el mostrador, qué lote vence primero y cuánto ganaste hoy, con botones grandes y claros desde el primer día.
+          </p>
+
+          <div class="hero-cta-group">
+            <a href="../index.html" class="btn-cta-primary">
+              🚀 Prueba gratuita de 15 días
+            </a>
+            <a href="#tutoriales" class="btn-cta-secondary">
+              📖 Ver cómo funciona (3 pasos)
+            </a>
+          </div>
+
+          <ul class="trust-badges" aria-label="Garantías de uso">
+            <li>✔ Sin tarjeta de crédito</li>
+            <li>✔ Letras grandes y claras</li>
+            <li>✔ Funciona en cualquier celular o PC</li>
+          </ul>
+        </div>
+
+        <!-- Vista previa visual e intuitiva del software -->
+        <div class="hero-preview" aria-label="Demostración visual de nuestro inventario software">
+          <div class="preview-window">
+            <div class="preview-topbar">
+              <span class="dot red"></span>
+              <span class="dot yellow"></span>
+              <span class="dot green"></span>
+              <span class="preview-title">Tienda Don Chucho · Inventario Software FIFO</span>
+            </div>
+            <div class="preview-body">
+              <div class="preview-row">
+                <div class="preview-item-info">
+                  <span class="preview-emoji" aria-hidden="true">🌾</span>
+                  <div>
+                    <strong>Arroz Diana 500g</strong>
+                    <small>Lote L-ARR-01 (Sale primero)</small>
+                  </div>
+                </div>
+                <span class="preview-badge ok">35 disponibles</span>
+                <strong class="preview-price">$2.800</strong>
+              </div>
+
+              <div class="preview-row">
+                <div class="preview-item-info">
+                  <span class="preview-emoji" aria-hidden="true">🥛</span>
+                  <div>
+                    <strong>Leche Alquería Entera 1L</strong>
+                    <small>Lote vencido bloqueado automáticamente</small>
+                  </div>
+                </div>
+                <span class="preview-badge ok">23 disponibles</span>
+                <strong class="preview-price">$4.600</strong>
+              </div>
+
+              <div class="preview-row">
+                <div class="preview-item-info">
+                  <span class="preview-emoji" aria-hidden="true">🥚</span>
+                  <div>
+                    <strong>Cubeta Huevos AA x30</strong>
+                    <small>Lote L-HUE-01 · Avícola El Triunfo</small>
+                  </div>
+                </div>
+                <span class="preview-badge ok">14 disponibles</span>
+                <strong class="preview-price">$16.500</strong>
+              </div>
+
+              <div class="preview-total-bar">
+                <div>
+                  <span>Total a cobrar en caja</span>
+                  <strong>$23.900</strong>
+                </div>
+                <span class="preview-pay-btn">Cobrar con 1 toque ✓</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- BENEFICIOS SEO: Por qué elegir este inventario software -->
+    <section id="beneficios" class="benefits-section" aria-labelledby="benefits-heading">
+      <div class="container">
+        <div class="section-header">
+          <span class="section-kicker">Pensado para la vida real</span>
+          <h2 id="benefits-heading">¿Por qué Tiendapp es el inventario software preferido por tenderos y dueños?</h2>
+          <p>Diseñamos cada pantalla para que cualquier persona, sin importar su edad o experiencia con computadores, pueda atender rápido y sin miedo a equivocarse.</p>
+        </div>
+
+        <div class="benefits-grid">
+          <article class="benefit-card">
+            <div class="benefit-icon" aria-hidden="true">🔒</div>
+            <h3>Modo Tendero Seguro</h3>
+            <p>Tu empleado solo ve los botones para vender y dar vueltas. No puede borrar productos ni cambiar precios por accidente.</p>
+          </article>
+
+          <article class="benefit-card">
+            <div class="benefit-icon" aria-hidden="true">📦</div>
+            <h3>Control por Lotes (FIFO)</h3>
+            <p>Nuestro <strong>inventario software</strong> descuenta primero la mercancía más antigua y bloquea los productos vencidos para que nunca pierdas plata.</p>
+          </article>
+
+          <article class="benefit-card">
+            <div class="benefit-icon" aria-hidden="true">👓</div>
+            <h3>Lectura Cómoda y Modo Oscuro</h3>
+            <p>Números grandes, alto contraste para cuidar la vista todo el día y modo nocturno con un solo botón.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECCIÓN DE TUTORIALES: Muy visual y orientada a gente mayor -->
+    <section id="tutoriales" class="tutorials-section" aria-labelledby="tutorials-heading">
+      <div class="container">
+        <div class="section-header">
+          <span class="section-kicker">Guía Visual Sin Complicaciones</span>
+          <h2 id="tutorials-heading">Aprende a usar tu inventario software en 3 pasos sencillos</h2>
+          <p>No necesitas cursos largos ni manuales técnicos. Sigue estas tarjetas con dibujos grandes y empieza hoy mismo:</p>
+        </div>
+
+        <div class="tutorials-grid">
+          <!-- Paso 1 -->
+          <article class="tutorial-card">
+            <div class="step-header">
+              <span class="step-number">PASO 1</span>
+              <span class="step-time">Toma 2 segundos</span>
+            </div>
+            <div class="tutorial-illustration" aria-hidden="true">
+              <div class="illus-box">
+                <span class="illus-finger">👆</span>
+                <div class="illus-btn">🌾 Arroz Diana · $2.800</div>
+              </div>
+            </div>
+            <h3>1. Toca el dibujo del producto</h3>
+            <p>
+              Busca el producto en la pantalla por su nombre o fotografía grande y <strong>tócalo una vez con el dedo o el ratón</strong>. Se sumará solito a la cuenta del cliente.
+            </p>
+            <div class="senior-tip">
+              <strong>💡 Consejo práctico:</strong> Si el cliente lleva 2 unidades, simplemente tócalo 2 veces.
+            </div>
+          </article>
+
+          <!-- Paso 2 -->
+          <article class="tutorial-card">
+            <div class="step-header">
+              <span class="step-number">PASO 2</span>
+              <span class="step-time">Cálculo automático</span>
+            </div>
+            <div class="tutorial-illustration" aria-hidden="true">
+              <div class="illus-box">
+                <div class="illus-bills">
+                  <span>💵 $10.000</span>
+                  <span>💵 $20.000</span>
+                </div>
+                <div class="illus-change">Vueltas a entregar: <strong>$14.400</strong></div>
+              </div>
+            </div>
+            <h3>2. Elige el billete y cobra sin hacer cuentas</h3>
+            <p>
+              Toca el botón con el billete que te entregó el cliente (por ejemplo <strong>$20.000</strong>) y el programa te muestra en letras gigantes <strong>cuánto debes devolver de cambio</strong>.
+            </p>
+            <div class="senior-tip">
+              <strong>💡 Consejo práctico:</strong> Luego presiona el botón verde grande que dice <em>«Cobrar y Descontar Stock»</em>.
+            </div>
+          </article>
+
+          <!-- Paso 3 -->
+          <article class="tutorial-card">
+            <div class="step-header">
+              <span class="step-number">PASO 3</span>
+              <span class="step-time">Solo para el Dueño</span>
+            </div>
+            <div class="tutorial-illustration" aria-hidden="true">
+              <div class="illus-box">
+                <div class="illus-role-switch">
+                  <span>🛒 Tendero</span>
+                  <span class="active-owner-pill">🔑 Dueño</span>
+                </div>
+                <div class="illus-lot-tag">📦 + Nuevo Lote de Mercancía</div>
+              </div>
+            </div>
+            <h3>3. Anota cuando llegue mercancía nueva</h3>
+            <p>
+              Cuando llegue el proveedor, toca arriba el botón <strong>«🔑 Dueño»</strong> y escribe cuántas unidades llegaron y cuándo vencen. El sistema las ordena por ti.
+            </p>
+            <div class="senior-tip">
+              <strong>💡 Consejo práctico:</strong> Al terminar, vuelve a tocar <em>«🛒 Tendero»</em> para dejar la caja bloqueada y segura.
+            </div>
+          </article>
+        </div>
+
+        <div class="tutorials-cta-banner">
+          <div>
+            <h3>¿Quieres practicar ahora mismo sin miedo a dañar nada?</h3>
+            <p>Incluimos una tienda de prueba lista con productos de ejemplo para que practiques todos los botones.</p>
+          </div>
+          <a href="../index.html" class="btn-cta-primary">
+            Probar el simulador gratis →
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- TABLA DE PRECIOS: Plan Tienda y Plan Empresa -->
+    <section id="precios" class="pricing-section" aria-labelledby="pricing-heading">
+      <div class="container">
+        <div class="section-header">
+          <span class="section-kicker">Precios Claros y Justos</span>
+          <h2 id="pricing-heading">Elige el plan de nuestro inventario software para tu negocio</h2>
+          <p>Ambos planes incluyen tu <strong>Prueba gratuita de 15 días</strong> con todas las funciones activas desde el primer minuto.</p>
+        </div>
+
+        <div class="pricing-grid">
+          <!-- Plan Tienda -->
+          <article class="pricing-card">
+            <div class="plan-header">
+              <span class="plan-badge">Ideal para empezar</span>
+              <h3>Plan Tienda</h3>
+              <p class="plan-desc">Para tiendas de barrio, cigarrerías, panaderías y pequeños comercios.</p>
+            </div>
+
+            <div class="plan-price">
+              <span class="currency">$</span>
+              <strong class="amount">29.900</strong>
+              <span class="period">COP / mes</span>
+            </div>
+
+            <ul class="plan-features">
+              <li>✅ <strong>Punto de Venta (POS)</strong> ultrarrápido en 1 pantalla</li>
+              <li>✅ <strong>Interfaz bloqueada para Tendero</strong> (solo vender)</li>
+              <li>✅ <strong>Panel de Dueño</strong> con control de Lotes FIFO</li>
+              <li>✅ Hasta <strong>1.500 productos</strong> y lotes ilimitados</li>
+              <li>✅ Alerta automática de productos próximos a vencer</li>
+              <li>✅ Respaldo local y descarga de inventario en 1 clic</li>
+            </ul>
+
+            <a href="../index.html?plan=tienda" class="btn-cta-outline">
+              Prueba gratuita de 15 días
+            </a>
+          </article>
+
+          <!-- Plan Empresa (Destacado) -->
+          <article class="pricing-card featured-plan">
+            <div class="popular-ribbon">MÁS ELEGIDO</div>
+            <div class="plan-header">
+              <span class="plan-badge highlight">Negocios en crecimiento</span>
+              <h3>Plan Empresa</h3>
+              <p class="plan-desc">Para minimercados, distribuidoras, autoservicios y negocios con alto volumen.</p>
+            </div>
+
+            <div class="plan-price">
+              <span class="currency">$</span>
+              <strong class="amount">69.900</strong>
+              <span class="period">COP / mes</span>
+            </div>
+
+            <ul class="plan-features">
+              <li>✅ <strong>Todo lo incluido en el Plan Tienda</strong></li>
+              <li>✅ <strong>Productos, lotes FIFO y ventas ilimitadas</strong></li>
+              <li>✅ Kardex completo de auditoría y reversión de anulaciones</li>
+              <li>✅ Control de costos por lote y valoración de inventario</li>
+              <li>✅ Protección con PIN de mostrador para el modo Dueño</li>
+              <li>✅ Soporte prioritario paso a paso por WhatsApp y teléfono</li>
+            </ul>
+
+            <a href="../index.html?plan=empresa" class="btn-cta-primary full-width">
+              🚀 Prueba gratuita de 15 días
+            </a>
+          </article>
+        </div>
+
+        <!-- Tabla comparativa directa para lectura rápida -->
+        <div class="comparison-table-wrap" aria-label="Tabla comparativa entre Plan Tienda y Plan Empresa">
+          <table class="pricing-table">
+            <thead>
+              <tr>
+                <th>Característica del Inventario Software</th>
+                <th>Plan Tienda ($29.900/mes)</th>
+                <th>Plan Empresa ($69.900/mes)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Catálogo de productos y ventas rápidas</strong></td>
+                <td>Hasta 1.500 productos</td>
+                <td><strong>Ilimitados</strong></td>
+              </tr>
+              <tr>
+                <td><strong>Control de Lotes por método FIFO (Primero en entrar, primero en salir)</strong></td>
+                <td>✔ Incluido</td>
+                <td>✔ Incluido + Valoración de costos</td>
+              </tr>
+              <tr>
+                <td><strong>Bloqueo de seguridad para Tendero</strong></td>
+                <td>✔ Incluido</td>
+                <td>✔ Incluido + PIN de mostrador</td>
+              </tr>
+              <tr>
+                <td><strong>Modo Oscuro para descanso visual</strong></td>
+                <td>✔ Incluido</td>
+                <td>✔ Incluido</td>
+              </tr>
+              <tr>
+                <td><strong>Acompañamiento y soporte para adultos mayores</strong></td>
+                <td>Guías visuales integradas</td>
+                <td><strong>Atención personalizada prioritaria</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA FINAL -->
+    <section class="final-cta-section" aria-labelledby="final-cta-heading">
+      <div class="container final-cta-box">
+        <h2 id="final-cta-heading">Empieza hoy con el inventario software que sí entiendes a la primera</h2>
+        <p>Activa tu cuenta de demostración inmediata sin papeleos y comprueba lo fácil que es llevar tus cuentas claras.</p>
+        <a href="../index.html" class="btn-cta-primary btn-large">
+          🎁 Activar mi Prueba gratuita de 15 días
+        </a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <p>
+        <strong>Tiendapp</strong> · El <em>inventario software</em> minimalista en HTML5, CSS3 y Vanilla JS con método FIFO.
+      </p>
+      <div class="footer-links">
+        <a href="../index.html">Abrir Aplicación POS</a>
+        <a href="#tutoriales">Tutoriales para Principiantes</a>
+        <a href="#precios">Planes Tienda y Empresa</a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Script ligero para el Switch de Modo Oscuro con persistencia compartida -->
+  <script>
+    (function () {
+      const STORAGE_KEY = 'tiendapp_theme'
+      const root = document.documentElement
+      const toggleBtn = document.getElementById('theme-toggle-btn')
+      const switchText = document.getElementById('theme-switch-text')
+
+      function getInitialTheme() {
+        try {
+          const saved = localStorage.getItem(STORAGE_KEY)
+          if (saved === 'dark' || saved === 'light') return saved
+        } catch (_) {}
+        return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+          ? 'dark'
+          : 'light'
+      }
+
+      function applyTheme(theme) {
+        const isDark = theme === 'dark'
+        root.setAttribute('data-theme', isDark ? 'dark' : 'light')
+        root.classList.toggle('dark', isDark)
+        if (toggleBtn) {
+          toggleBtn.setAttribute('aria-checked', String(isDark))
+        }
+        if (switchText) {
+          switchText.textContent = isDark ? 'Modo Oscuro: ON' : 'Probar Modo Oscuro'
+        }
+      }
+
+      const current = getInitialTheme()
+      applyTheme(current)
+
+      if (toggleBtn) {
+        toggleBtn.addEventListener('click', function () {
+          const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'
+          try {
+            localStorage.setItem(STORAGE_KEY, next)
+          } catch (_) {}
+          applyTheme(next)
+        })
+      }
+    })()
+  </script>
+</body>
+</html>
