@@ -1,21 +1,24 @@
-import { isOwner } from '../core/permissions.js'
 import {
   getState,
   setState,
-  addItemToCartList,
-  decrementItemInCartList,
-  setItemQuantityInCartList,
-  removeItemFromCartList,
-  calculateCartTotal,
-  showFeedback,
+  addProductToCart,
+  updateCartItemQty,
+  removeCartItem,
+  calculateCartTotals,
+  showToast,
 } from '../state.js'
-import { registerSale } from '../services/sales.js'
+import { registerSaleRequest, generateClientOpId, fetchSales } from '../services/sales.js'
 import { formatCOP, BILLETES_RAPIDOS, calculateChange } from '../utils/money.js'
 import { isBulkUnit, formatQty } from '../utils/quantities.js'
-import { resolverFotoProducto } from '../utils/images.js'
-import { openProductLotsModal, openProductModal } from './lots.js'
+import { icon } from './icons.js'
+import { openSaleReceiptModal } from './receipt.js'
+import { openDialog } from './dialog.js'
 
-const METODOS_PAGO = ['Efectivo', 'Nequi', 'DaviPlata', 'Transferencia', 'Tarjeta', 'Fiado']
+const PAYMENT_METHODS = [
+  { code: 'efectivo', label: 'Efectivo' },
+  { code: 'nequi', label: 'Nequi' },
+  { code: 'daviplata', label: 'Daviplata' },
+]
 
 function escapeHTML(str) {
   return String(str ?? '')
@@ -25,151 +28,147 @@ function escapeHTML(str) {
     .replace(/"/g, '&quot;')
 }
 
-function getFilteredProducts(state) {
-  const q = String(state.searchQuery || '').trim().toLowerCase()
-  const cat = state.categoryFilter || 'Todas'
-  let list = state.products || []
+function getFilteredPOSProducts(st) {
+  const q = String(st.posSearch || '').trim().toLowerCase()
+  const cat = st.posCategory || 'ALL'
 
-  if (state.onlyFrequent) {
-    list = list.filter((p) => p.es_frecuente)
-  }
-  if (cat && cat !== 'Todas') {
-    list = list.filter((p) => p.categoria === cat)
-  }
-  if (q) {
-    list = list.filter(
-      (p) =>
-        String(p.nombre || '').toLowerCase().includes(q) ||
-        String(p.codigo_barras || '').toLowerCase().includes(q) ||
-        String(p.categoria || '').toLowerCase().includes(q)
+  return (st.products || []).filter((p) => {
+    if (!p.is_active) return false
+    if (cat !== 'ALL' && p.category_id !== cat) return false
+    if (!q) return true
+    return (
+      String(p.name || '').toLowerCase().includes(q) ||
+      String(p.sku || '').toLowerCase().includes(q) ||
+      String(p.barcode || '').toLowerCase().includes(q)
     )
-  }
-  return list
+  })
 }
 
-export function renderPOSSectionHTML(state) {
-  const ownerMode = isOwner(state.user)
-  const filteredProducts = getFilteredProducts(state)
-  const categories = ['Todas', ...new Set((state.products || []).map((p) => p.categoria).filter(Boolean))]
-  const cartTotal = calculateCartTotal(state.cart)
+export function renderPOSViewHTML(st) {
+  const products = getFilteredPOSProducts(st)
+  const categories = st.categories || []
+  const { subtotal, total } = calculateCartTotals(st.cart)
+
   const receivedNum =
-    state.paymentMethod === 'Efectivo' && state.amountReceived !== ''
-      ? Number(state.amountReceived)
-      : cartTotal
-  const change =
-    state.paymentMethod === 'Efectivo' && state.amountReceived !== ''
-      ? calculateChange(receivedNum, cartTotal)
+    st.paymentMethod === 'efectivo' && st.amountReceived !== ''
+      ? Number(st.amountReceived)
+      : total
+  const changeAmount =
+    st.paymentMethod === 'efectivo' && st.amountReceived !== ''
+      ? calculateChange(receivedNum, total)
       : 0
 
-  const catalogCardsHTML =
-    filteredProducts.length === 0
+  const rowsHTML =
+    products.length === 0
       ? `
-        <div class="empty-catalog-state">
-          <p>No se encontraron productos para esta búsqueda.</p>
-          ${
-            ownerMode
-              ? `<button type="button" class="btn btn-primary" id="btn-pos-create-empty">+ Crear Producto con este código</button>`
-              : `<small class="text-muted">Modo Tendero bloqueado: solicita al Dueño registrar nuevos productos.</small>`
-          }
+        <div class="empty-state">
+          <p class="empty-title">No hay productos disponibles para este criterio</p>
+          <p class="empty-subtitle">Ajusta el término de búsqueda o verifica que existan productos activos con stock vigente.</p>
         </div>
       `
-      : filteredProducts
-          .map((prod) => {
-            const available = Number(prod.cantidad_disponible || 0)
-            const outOfStock = available <= 0
-            const lowStock = !outOfStock && available <= Number(prod.stock_minimo || 5)
-            const inCartItem = state.cart.find((c) => c.id === prod.id)
-            const nextLot = prod.proximo_lote
+      : `
+        <div class="pos-catalog-grid">
+          ${products
+            .map((p) => {
+              const avail = Number(p.available_stock || 0)
+              const isOut = avail <= 0
+              const isLow = !isOut && p.is_low_stock
+              const inCart = st.cart.find((c) => c.product_id === p.id)
 
-            let stockBadgeClass = 'pill-ok'
-            if (outOfStock) stockBadgeClass = 'pill-zero'
-            else if (lowStock) stockBadgeClass = 'pill-low'
+              let stockBadge = `<span class="status-badge badge-success">${formatQty(avail, p.unit)}</span>`
+              if (isOut) {
+                stockBadge = `<span class="status-badge badge-danger">Agotado</span>`
+              } else if (isLow) {
+                stockBadge = `<span class="status-badge badge-warning">${formatQty(avail, p.unit)}</span>`
+              }
 
-            return `
-              <article class="product-card ${outOfStock ? 'is-out' : ''} ${inCartItem ? 'in-cart' : ''}" data-add-product="${prod.id}">
-                <div class="product-card-top">
-                  <img src="${resolverFotoProducto(prod)}" alt="${escapeHTML(prod.nombre)}" class="product-thumb" loading="lazy" />
-                  <div class="product-badges">
-                    <span class="stock-pill ${stockBadgeClass}">
-                      ${outOfStock ? 'Agotado' : formatQty(available, prod.unidad_medida)}
-                    </span>
+              return `
+                <button
+                  type="button"
+                  class="pos-product-tile ${isOut ? 'tile-disabled' : ''} ${inCart ? 'tile-selected' : ''}"
+                  data-pos-add="${p.id}"
+                  ${isOut ? 'disabled' : ''}
+                >
+                  <div class="tile-top">
+                    <span class="tile-sku">${escapeHTML(p.sku)}${p.barcode ? ` · ${escapeHTML(p.barcode)}` : ''}</span>
+                    ${stockBadge}
+                  </div>
+                  <div class="tile-name">${escapeHTML(p.name)}</div>
+                  <div class="tile-bottom">
+                    <div class="tile-price">
+                      <strong>${formatCOP(p.sale_price)}</strong>
+                      <small>/ ${escapeHTML(p.unit)}</small>
+                    </div>
                     ${
-                      inCartItem
-                        ? `<span class="cart-count-pill">En carrito: ${inCartItem.cantidad}</span>`
+                      inCart
+                        ? `<span class="tile-cart-qty">${inCart.quantity} en ticket</span>`
+                        : p.next_lot_number
+                        ? `<span class="tile-lot-hint">Lote ${escapeHTML(p.next_lot_number)}</span>`
                         : ''
                     }
                   </div>
-                </div>
-
-                <div class="product-card-body">
-                  <h3 class="product-name" title="${escapeHTML(prod.nombre)}">${escapeHTML(prod.nombre)}</h3>
-                  <div class="product-meta">
-                    <span class="product-code">${escapeHTML(prod.codigo_barras)}</span>
-                    ${
-                      nextLot
-                        ? `<span class="lot-mini-tag" title="Próximo lote en descontarse por FIFO">FIFO: ${escapeHTML(nextLot.codigo_lote)}</span>`
-                        : prod.cantidad_vencida > 0
-                        ? `<span class="lot-mini-tag tag-expired">Lote vencido bloqueado</span>`
-                        : ''
-                    }
-                  </div>
-                  <div class="product-price-row">
-                    <strong class="product-price">${formatCOP(prod.precio_venta)}</strong>
-                    ${isBulkUnit(prod.unidad_medida) ? `<small>/ ${escapeHTML(prod.unidad_medida)}</small>` : ''}
-                  </div>
-                </div>
-
-                ${
-                  ownerMode
-                    ? `
-                  <div class="product-owner-bar" data-stop-card-click>
-                    <button type="button" class="btn-card-owner" data-open-lots="${prod.id}">
-                      Lotes FIFO (${(prod.lotes || []).length})
-                    </button>
-                    <button type="button" class="btn-card-owner" data-open-edit="${prod.id}">
-                      Editar
-                    </button>
-                  </div>
-                `
-                    : ''
-                }
-              </article>
-            `
-          })
-          .join('')
-
-  const cartItemsHTML =
-    state.cart.length === 0
-      ? `
-        <div class="cart-empty">
-          <p>El carrito está vacío</p>
-          <small>Toca cualquier producto o escanea su código de barras para vender y descontar stock por FIFO.</small>
+                </button>
+              `
+            })
+            .join('')}
         </div>
       `
-      : state.cart
+
+  const cartHTML =
+    st.cart.length === 0
+      ? `
+        <div class="cart-empty-state">
+          <p>Sin artículos en la venta actual</p>
+          <small>Escanea un código de barras o selecciona productos del catálogo.</small>
+        </div>
+      `
+      : st.cart
           .map((item) => {
-            const bulk = isBulkUnit(item.unidad_medida)
-            const lineSubtotal = Number(item.precio_venta) * Number(item.cantidad)
+            const bulk = isBulkUnit(item.unit)
+            const lineSubtotal = Number(item.unit_price) * Number(item.quantity)
             return `
-              <div class="cart-item">
-                <div class="cart-item-info">
-                  <strong>${escapeHTML(item.nombre)}</strong>
-                  <small>${formatCOP(item.precio_venta)} ${bulk ? `/ ${escapeHTML(item.unidad_medida)}` : 'c/u'} · Disp: ${item.cantidad_disponible}</small>
+              <div class="cart-line">
+                <div class="cart-line-main">
+                  <div>
+                    <div class="cart-line-name">${escapeHTML(item.name)}</div>
+                    <div class="cart-line-meta">
+                      <span>${escapeHTML(item.sku)}</span>
+                      <span>·</span>
+                      <span>${formatCOP(item.unit_price)} / ${escapeHTML(item.unit)}</span>
+                      <span>·</span>
+                      <span>Disp: ${item.available_stock}</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    class="btn-icon btn-icon-subtle"
+                    data-cart-remove="${item.product_id}"
+                    aria-label="Eliminar línea"
+                  >
+                    ${icon('trash', 14)}
+                  </button>
                 </div>
-                <div class="cart-item-controls">
-                  ${
-                    bulk
-                      ? `<input type="number" class="qty-input-bulk" step="0.05" min="0.001" max="${item.cantidad_disponible}" value="${item.cantidad}" data-set-qty="${item.id}" aria-label="Cantidad en ${escapeHTML(item.unidad_medida)}" />`
-                      : `
-                        <div class="qty-stepper">
-                          <button type="button" class="btn-step" data-dec-qty="${item.id}" aria-label="Restar 1">−</button>
-                          <span class="qty-value">${item.cantidad}</span>
-                          <button type="button" class="btn-step" data-inc-qty="${item.id}" aria-label="Sumar 1">+</button>
-                        </div>
-                      `
-                  }
-                  <strong class="cart-item-subtotal">${formatCOP(lineSubtotal)}</strong>
-                  <button type="button" class="btn-remove-item" data-remove-item="${item.id}" title="Quitar del carrito">✕</button>
+
+                <div class="cart-line-controls">
+                  <div class="qty-control-group">
+                    <button type="button" class="qty-btn" data-cart-dec="${item.product_id}" aria-label="Disminuir">
+                      ${icon('minus', 12)}
+                    </button>
+                    <input
+                      type="number"
+                      class="qty-input"
+                      step="${bulk ? '0.001' : '1'}"
+                      min="${bulk ? '0.001' : '1'}"
+                      max="${item.available_stock}"
+                      value="${item.quantity}"
+                      data-cart-input="${item.product_id}"
+                      aria-label="Cantidad"
+                    />
+                    <button type="button" class="qty-btn" data-cart-inc="${item.product_id}" aria-label="Aumentar">
+                      ${icon('plus', 12)}
+                    </button>
+                  </div>
+                  <div class="cart-line-subtotal">${formatCOP(lineSubtotal)}</div>
                 </div>
               </div>
             `
@@ -177,107 +176,118 @@ export function renderPOSSectionHTML(state) {
           .join('')
 
   return `
-    <div class="pos-workspace">
-      <!-- Columna Catálogo y Búsqueda -->
-      <section class="pos-catalog-col" aria-label="Catálogo de productos">
-        <div class="search-toolbar">
-          <div class="search-input-wrap">
+    <div class="pos-layout">
+      <!-- Panel Izquierdo: Buscador y Catálogo -->
+      <section class="pos-catalog-panel" aria-label="Catálogo de productos disponibles">
+        <header class="panel-toolbar">
+          <div class="search-field-wrapper">
+            ${icon('search', 16, 'search-icon')}
             <input
               id="pos-search-input"
               type="search"
-              value="${escapeHTML(state.searchQuery)}"
-              placeholder="Buscar producto o escanear código de barras (Enter para agregar)..."
+              value="${escapeHTML(st.posSearch)}"
+              placeholder="Buscar por nombre, SKU o lector de código de barras (Enter)..."
               autocomplete="off"
             />
           </div>
-          <div class="filter-pills">
-            <button type="button" class="pill-btn ${!state.onlyFrequent ? 'active' : ''}" id="btn-filter-all">
-              Todos (${state.products.length})
+
+          <div class="toolbar-actions">
+            <button type="button" class="btn btn-outline btn-sm" id="btn-pos-my-sales">
+              ${icon('sales', 15)}
+              <span>Mis ventas recientes</span>
             </button>
-            <button type="button" class="pill-btn ${state.onlyFrequent ? 'active' : ''}" id="btn-filter-freq">
-              ★ Frecuentes
-            </button>
-            ${categories
-              .filter((c) => c !== 'Todas')
-              .map(
-                (cat) => `
-                <button type="button" class="pill-btn ${state.categoryFilter === cat ? 'active' : ''}" data-cat-filter="${escapeHTML(cat)}">
-                  ${escapeHTML(cat)}
-                </button>
-              `
-              )
-              .join('')}
-            ${
-              ownerMode
-                ? `<button type="button" class="btn btn-sm btn-primary ml-auto" id="btn-pos-quick-new">+ Producto / Lote</button>`
-                : `<span class="locked-role-indicator ml-auto" title="El Tendero solo puede vender y descontar existencias">🔒 Modo Tendero (Solo Venta)</span>`
-            }
           </div>
+        </header>
+
+        <div class="category-filter-bar" role="tablist" aria-label="Filtrar por categoría">
+          <button
+            type="button"
+            class="filter-chip ${st.posCategory === 'ALL' ? 'active' : ''}"
+            data-pos-cat="ALL"
+          >
+            Todos
+          </button>
+          ${categories
+            .map(
+              (c) => `
+              <button
+                type="button"
+                class="filter-chip ${st.posCategory === c.id ? 'active' : ''}"
+                data-pos-cat="${c.id}"
+              >
+                ${escapeHTML(c.name)}
+              </button>
+            `
+            )
+            .join('')}
         </div>
 
-        <div class="products-grid">
-          ${catalogCardsHTML}
+        <div class="pos-catalog-scroll">
+          ${rowsHTML}
         </div>
       </section>
 
-      <!-- Columna Carrito y Cobro Rápido -->
-      <aside class="pos-cart-col" aria-label="Carrito de venta y cobro">
-        <div class="cart-header">
+      <!-- Panel Derecho: Ticket y Cobro -->
+      <aside class="pos-ticket-panel" aria-label="Ticket de venta">
+        <header class="ticket-header">
           <div>
-            <h2>Ticket de Venta</h2>
-            <small>Descuento automático por lote (FIFO)</small>
+            <h2 class="ticket-title">Orden de Venta</h2>
+            <span class="ticket-subtitle">Salida automática por lote (FEFO / FIFO)</span>
           </div>
           ${
-            state.cart.length > 0
-              ? `<button type="button" class="btn btn-xs btn-ghost-danger" id="btn-clear-cart">Vaciar (Esc)</button>`
-              : `<span class="badge badge-neutral">0 ítems</span>`
+            st.cart.length > 0
+              ? `<button type="button" class="btn btn-ghost btn-xs" id="btn-pos-clear-cart">Limpiar</button>`
+              : ''
           }
+        </header>
+
+        <div class="ticket-lines-container">
+          ${cartHTML}
         </div>
 
-        <div class="cart-items-list">
-          ${cartItemsHTML}
-        </div>
-
-        <div class="cart-checkout-box">
-          <div class="payment-methods-grid">
-            ${METODOS_PAGO.map(
-              (m) => `
-                <button
-                  type="button"
-                  class="pay-method-btn ${state.paymentMethod === m ? 'active' : ''}"
-                  data-pay-method="${m}"
-                >
-                  ${m}
-                </button>
-              `
-            ).join('')}
+        <footer class="ticket-footer">
+          <div class="payment-selector">
+            <span class="section-micro-label">Método de pago</span>
+            <div class="payment-Segmented">
+              ${PAYMENT_METHODS.map(
+                (pm) => `
+                  <button
+                    type="button"
+                    class="segment-btn ${st.paymentMethod === pm.code ? 'active' : ''}"
+                    data-pos-pay="${pm.code}"
+                  >
+                    ${pm.label}
+                  </button>
+                `
+              ).join('')}
+            </div>
           </div>
 
           ${
-            state.paymentMethod === 'Efectivo' && state.cart.length > 0
+            st.paymentMethod === 'efectivo' && st.cart.length > 0
               ? `
-                <div class="cash-helper-box">
-                  <div class="quick-bills-row">
-                    <button type="button" class="bill-chip" data-quick-bill="${Math.round(cartTotal)}">Exacto</button>
+                <div class="cash-calculator">
+                  <div class="quick-denominations">
+                    <button type="button" class="denom-btn" data-pos-denom="${Math.round(total)}">Exacto</button>
                     ${BILLETES_RAPIDOS.map(
-                      (b) => `<button type="button" class="bill-chip" data-quick-bill="${b}">$${b / 1000}k</button>`
+                      (b) => `<button type="button" class="denom-btn" data-pos-denom="${b}">${formatCOP(b)}</button>`
                     ).join('')}
                   </div>
-                  <div class="cash-inputs-row">
-                    <div class="field-compact">
-                      <label for="pos-amount-received">Efectivo recibido</label>
+                  <div class="cash-row-grid">
+                    <div class="form-field compact">
+                      <label for="pos-cash-input">Efectivo recibido</label>
                       <input
-                        id="pos-amount-received"
+                        id="pos-cash-input"
                         type="number"
                         min="0"
-                        step="100"
-                        placeholder="${Math.round(cartTotal)}"
-                        value="${escapeHTML(state.amountReceived)}"
+                        step="any"
+                        placeholder="${Math.round(total)}"
+                        value="${escapeHTML(st.amountReceived)}"
                       />
                     </div>
-                    <div class="change-display">
-                      <span>Cambio / Vueltas</span>
-                      <strong>${formatCOP(change)}</strong>
+                    <div class="change-box">
+                      <span>Cambio a devolver</span>
+                      <strong>${formatCOP(changeAmount)}</strong>
                     </div>
                   </div>
                 </div>
@@ -285,47 +295,48 @@ export function renderPOSSectionHTML(state) {
               : ''
           }
 
-          ${
-            state.paymentMethod === 'Fiado' && state.cart.length > 0
-              ? `
-                <div class="field-compact">
-                  <label for="pos-customer-name">Nombre del cliente (Fiado)</label>
-                  <input
-                    id="pos-customer-name"
-                    type="text"
-                    placeholder="Ej. Doña Martha Rojas"
-                    value="${escapeHTML(state.customerName)}"
-                  />
-                </div>
-              `
-              : ''
-          }
-
-          <div class="cart-total-row">
-            <span>Total a Cobrar</span>
-            <strong class="total-amount">${formatCOP(cartTotal)}</strong>
+          <div class="ticket-summary">
+            <div class="summary-row">
+              <span>Subtotal</span>
+              <span>${formatCOP(subtotal)}</span>
+            </div>
+            <div class="summary-row total">
+              <span>Total a cobrar</span>
+              <strong>${formatCOP(total)}</strong>
+            </div>
           </div>
 
           <button
             type="button"
-            id="btn-confirm-sale"
-            class="btn btn-checkout"
-            ${state.cart.length === 0 ? 'disabled' : ''}
+            id="btn-pos-submit"
+            class="btn btn-primary btn-block btn-lg"
+            ${st.cart.length === 0 ? 'disabled' : ''}
           >
-            Cobrar y Descontar Stock (${formatCOP(cartTotal)}) [F2]
+            ${icon('check', 16)}
+            <span>Confirmar Venta (${formatCOP(total)}) [F2]</span>
           </button>
-        </div>
+
+          ${
+            st.lastCompletedSale
+              ? `
+                <button type="button" class="btn btn-outline btn-block btn-sm" id="btn-pos-last-receipt">
+                  ${icon('printer', 14)}
+                  <span>Ver último comprobante (${escapeHTML(st.lastCompletedSale.folio)})</span>
+                </button>
+              `
+              : ''
+          }
+        </footer>
       </aside>
     </div>
   `
 }
 
-export function bindPOSEvents(root, refreshAllData) {
+export function bindPOSViewEvents(root, refreshCatalogAndContext) {
   const searchInput = root.querySelector('#pos-search-input')
 
   searchInput?.addEventListener('input', (e) => {
-    setState({ searchQuery: e.target.value })
-    // Restaurar foco y posición del cursor tras el re-render
+    setState({ posSearch: e.target.value })
     const nextInput = document.querySelector('#pos-search-input')
     if (nextInput) {
       nextInput.focus()
@@ -334,203 +345,266 @@ export function bindPOSEvents(root, refreshAllData) {
     }
   })
 
+  // Soporte para lector de códigos de barras USB (emula teclado + Enter)
   searchInput?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault()
       const st = getState()
-      const q = String(st.searchQuery || '').trim().toLowerCase()
+      const q = String(st.posSearch || '').trim().toLowerCase()
       if (!q) return
 
-      const exactBarcode = st.products.find(
-        (p) => String(p.codigo_barras || '').trim().toLowerCase() === q
+      const exactMatch = (st.products || []).find(
+        (p) =>
+          p.is_active &&
+          (String(p.barcode || '').toLowerCase() === q ||
+            String(p.sku || '').toLowerCase() === q)
       )
-      const filtered = getFilteredProducts(st)
-      const target = exactBarcode || (filtered.length === 1 ? filtered[0] : null)
+      const filtered = getFilteredPOSProducts(st)
+      const target = exactMatch || (filtered.length === 1 ? filtered[0] : null)
 
-      if (target) {
-        const res = addItemToCartList(st.cart, target, 1)
-        if (!res.added && res.reason) {
-          showFeedback('error', res.reason)
-        } else {
-          setState({ cart: res.cart, searchQuery: '' })
-          showFeedback('ok', `Agregado: ${target.nombre}`)
-        }
-        document.querySelector('#pos-search-input')?.focus()
-      } else {
-        showFeedback('error', `No se encontró producto con "${st.searchQuery}".`)
+      if (!target) {
+        showToast('error', `No se encontró producto activo para "${st.posSearch}".`)
+        return
       }
+
+      const res = addProductToCart(st.cart, target, 1)
+      if (!res.ok) {
+        showToast('error', res.error)
+      } else {
+        setState({ cart: res.cart, posSearch: '' })
+      }
+      document.querySelector('#pos-search-input')?.focus()
     }
   })
 
-  root.querySelector('#btn-filter-all')?.addEventListener('click', () => {
-    setState({ onlyFrequent: false, categoryFilter: 'Todas' })
-  })
-
-  root.querySelector('#btn-filter-freq')?.addEventListener('click', () => {
-    setState({ onlyFrequent: true })
-  })
-
-  root.querySelectorAll('[data-cat-filter]').forEach((btn) => {
+  root.querySelectorAll('[data-pos-cat]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      const cat = btn.getAttribute('data-cat-filter')
-      const current = getState().categoryFilter
-      setState({ categoryFilter: current === cat ? 'Todas' : cat, onlyFrequent: false })
+      setState({ posCategory: btn.getAttribute('data-pos-cat') })
     })
   })
 
-  root.querySelector('#btn-pos-quick-new')?.addEventListener('click', () => {
-    openProductModal(null, refreshAllData)
-  })
-
-  root.querySelector('#btn-pos-create-empty')?.addEventListener('click', () => {
-    openProductModal(null, refreshAllData, getState().searchQuery)
-  })
-
-  // Click en tarjeta de producto (agrega +1 al carrito)
-  root.querySelectorAll('[data-add-product]').forEach((card) => {
-    card.addEventListener('click', (e) => {
-      if (e.target.closest('[data-stop-card-click]')) return
-      const prodId = card.getAttribute('data-add-product')
+  root.querySelectorAll('[data-pos-add]').forEach((tile) => {
+    tile.addEventListener('click', () => {
+      const pid = tile.getAttribute('data-pos-add')
       const st = getState()
-      const prod = st.products.find((p) => p.id === prodId)
+      const prod = st.products.find((p) => p.id === pid)
       if (!prod) return
-      const res = addItemToCartList(st.cart, prod, 1)
-      if (!res.added && res.reason) {
-        showFeedback('error', res.reason)
+      const res = addProductToCart(st.cart, prod, 1)
+      if (!res.ok) {
+        showToast('error', res.error)
         return
       }
       setState({ cart: res.cart })
     })
   })
 
-  // Botones rápidos de Dueño dentro de la tarjeta
-  root.querySelectorAll('[data-open-lots]').forEach((btn) => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation()
-      openProductLotsModal(btn.getAttribute('data-open-lots'), refreshAllData)
-    })
-  })
-
-  root.querySelectorAll('[data-open-edit]').forEach((btn) => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation()
-      const prod = getState().products.find((p) => p.id === btn.getAttribute('data-open-edit'))
-      if (prod) openProductModal(prod, refreshAllData)
-    })
-  })
-
-  // Controles del carrito
-  root.querySelectorAll('[data-inc-qty]').forEach((btn) => {
+  root.querySelectorAll('[data-cart-inc]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      const id = btn.getAttribute('data-inc-qty')
+      const pid = btn.getAttribute('data-cart-inc')
       const st = getState()
-      const prod = st.products.find((p) => p.id === id)
+      const prod = st.products.find((p) => p.id === pid)
       if (!prod) return
-      const res = addItemToCartList(st.cart, prod, 1)
-      if (!res.added && res.reason) {
-        showFeedback('error', res.reason)
-      }
+      const res = addProductToCart(st.cart, prod, 1)
+      if (!res.ok) showToast('error', res.error)
       setState({ cart: res.cart })
     })
   })
 
-  root.querySelectorAll('[data-dec-qty]').forEach((btn) => {
+  root.querySelectorAll('[data-cart-dec]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      const id = btn.getAttribute('data-dec-qty')
+      const pid = btn.getAttribute('data-cart-dec')
       const st = getState()
-      setState({ cart: decrementItemInCartList(st.cart, id, 1) })
+      const item = st.cart.find((c) => c.product_id === pid)
+      if (!item) return
+      const step = isBulkUnit(item.unit) ? 0.25 : 1
+      const next = updateCartItemQty(st.cart, pid, item.quantity - step)
+      setState({ cart: next })
     })
   })
 
-  root.querySelectorAll('[data-set-qty]').forEach((input) => {
+  root.querySelectorAll('[data-cart-input]').forEach((input) => {
     input.addEventListener('change', (e) => {
-      const id = input.getAttribute('data-set-qty')
+      const pid = input.getAttribute('data-cart-input')
       const st = getState()
-      const prod = st.products.find((p) => p.id === id)
-      setState({
-        cart: setItemQuantityInCartList(st.cart, id, e.target.value, prod?.cantidad_disponible),
-      })
+      const prod = st.products.find((p) => p.id === pid)
+      const next = updateCartItemQty(st.cart, pid, e.target.value, prod?.available_stock)
+      setState({ cart: next })
     })
   })
 
-  root.querySelectorAll('[data-remove-item]').forEach((btn) => {
+  root.querySelectorAll('[data-cart-remove]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      const id = btn.getAttribute('data-remove-item')
-      setState({ cart: removeItemFromCartList(getState().cart, id) })
+      const pid = btn.getAttribute('data-cart-remove')
+      setState({ cart: removeCartItem(getState().cart, pid) })
     })
   })
 
-  root.querySelector('#btn-clear-cart')?.addEventListener('click', () => {
-    setState({ cart: [], amountReceived: '', customerName: '' })
+  root.querySelector('#btn-pos-clear-cart')?.addEventListener('click', () => {
+    setState({ cart: [], amountReceived: '' })
   })
 
-  root.querySelectorAll('[data-pay-method]').forEach((btn) => {
+  root.querySelectorAll('[data-pos-pay]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      setState({ paymentMethod: btn.getAttribute('data-pay-method') })
+      setState({ paymentMethod: btn.getAttribute('data-pos-pay') })
     })
   })
 
-  root.querySelectorAll('[data-quick-bill]').forEach((btn) => {
+  root.querySelectorAll('[data-pos-denom]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      setState({ amountReceived: btn.getAttribute('data-quick-bill') })
+      setState({ amountReceived: btn.getAttribute('data-pos-denom') })
     })
   })
 
-  root.querySelector('#pos-amount-received')?.addEventListener('input', (e) => {
+  root.querySelector('#pos-cash-input')?.addEventListener('input', (e) => {
     setState({ amountReceived: e.target.value })
-    const el = document.querySelector('#pos-amount-received')
+    const el = document.querySelector('#pos-cash-input')
     if (el) el.focus()
   })
 
-  root.querySelector('#pos-customer-name')?.addEventListener('input', (e) => {
-    setState({ customerName: e.target.value })
-    const el = document.querySelector('#pos-customer-name')
-    if (el) el.focus()
+  root.querySelector('#btn-pos-submit')?.addEventListener('click', () => {
+    submitCurrentSale(refreshCatalogAndContext)
   })
 
-  root.querySelector('#btn-confirm-sale')?.addEventListener('click', () => {
-    executeCheckout(refreshAllData)
+  root.querySelector('#btn-pos-last-receipt')?.addEventListener('click', () => {
+    const sale = getState().lastCompletedSale
+    if (sale) openSaleReceiptModal(sale)
+  })
+
+  root.querySelector('#btn-pos-my-sales')?.addEventListener('click', async () => {
+    try {
+      const data = await fetchSales({})
+      openMyRecentSalesModal(data.sales || [])
+    } catch (err) {
+      showToast('error', err.message || 'No se pudieron consultar las ventas recientes.')
+    }
   })
 }
 
-export async function executeCheckout(refreshAllData) {
+let isSubmittingSale = false
+let currentOperationId = null
+
+export async function submitCurrentSale(refreshCatalogAndContext) {
   const st = getState()
-  if (!st.cart.length) return
+  if (!st.cart.length || isSubmittingSale) return
+
+  const { total } = calculateCartTotals(st.cart)
+  if (st.paymentMethod === 'efectivo' && st.amountReceived !== '') {
+    const rec = Number(st.amountReceived)
+    if (!Number.isFinite(rec) || rec < total) {
+      showToast('error', `El monto recibido (${formatCOP(rec)}) es menor al total (${formatCOP(total)}).`)
+      return
+    }
+  }
+
+  isSubmittingSale = true
+  if (!currentOperationId) {
+    currentOperationId = generateClientOpId()
+  }
+
+  const btn = document.querySelector('#btn-pos-submit')
+  if (btn) {
+    btn.disabled = true
+    btn.textContent = 'Procesando transacción...'
+  }
 
   try {
-    const sale = await registerSale(
-      st.cart,
-      {
-        metodo_pago: st.paymentMethod,
-        monto_recibido: st.amountReceived !== '' ? Number(st.amountReceived) : undefined,
-        cliente_nombre: st.customerName || null,
-      },
-      st.user
-    )
+    const payload = {
+      client_operation_id: currentOperationId,
+      payment_method: st.paymentMethod,
+      amount_received:
+        st.paymentMethod === 'efectivo' && st.amountReceived !== ''
+          ? Number(st.amountReceived)
+          : total,
+      items: st.cart.map((c) => ({
+        product_id: c.product_id,
+        quantity: c.quantity,
+      })),
+    }
 
-    const lotesUsados = sale.detalles
-      .flatMap((d) => (d.asignaciones_lote || []).map((a) => `${a.codigo_lote} (-${a.cantidad_descontada})`))
-      .join(', ')
+    const sale = await registerSaleRequest(payload)
+    currentOperationId = null
 
     setState(
       {
         cart: [],
         amountReceived: '',
-        customerName: '',
+        lastCompletedSale: sale,
       },
       false
     )
 
-    if (typeof refreshAllData === 'function') {
-      await refreshAllData()
+    if (typeof refreshCatalogAndContext === 'function') {
+      await refreshCatalogAndContext()
     }
 
-    const changeMsg = sale.cambio_entregado > 0 ? ` · Cambio: ${formatCOP(sale.cambio_entregado)}` : ''
-    showFeedback(
-      'ok',
-      `Venta completada por ${formatCOP(sale.total)}${changeMsg} · Lotes FIFO descontados: ${lotesUsados}`
-    )
+    showToast('ok', `Venta ${sale.folio} registrada por ${formatCOP(sale.total)}.`)
+    openSaleReceiptModal(sale)
   } catch (err) {
-    showFeedback('error', err.message || 'No se pudo completar la venta.')
+    showToast('error', err.message || 'Error al registrar la venta.')
+    setState({})
+  } finally {
+    isSubmittingSale = false
   }
+}
+
+function openMyRecentSalesModal(salesList) {
+  const rows =
+    salesList.length === 0
+      ? `<tr><td colspan="5" class="empty-cell">No has registrado ventas todavía en tu turno.</td></tr>`
+      : salesList
+          .slice(0, 25)
+          .map((s) => {
+            const dt = new Date(s.created_at).toLocaleString('es-CO', {
+              dateStyle: 'short',
+              timeStyle: 'short',
+            })
+            return `
+              <tr>
+                <td><strong>${escapeHTML(s.folio)}</strong></td>
+                <td>${escapeHTML(dt)}</td>
+                <td><span class="status-badge badge-neutral">${escapeHTML(s.payment_method_name)}</span></td>
+                <td class="num"><strong>${formatCOP(s.total)}</strong></td>
+                <td class="actions-cell">
+                  <button type="button" class="btn btn-outline btn-xs" data-view-receipt="${s.id}">Comprobante</button>
+                </td>
+              </tr>
+            `
+          })
+          .join('')
+
+  openDialog({
+    title: 'Mis Ventas Operativas',
+    subtitle: 'Consulta e impresión de comprobantes registrados en tu sesión.',
+    maxWidth: '640px',
+    bodyHTML: `
+      <div class="table-container">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Folio</th>
+              <th>Fecha y Hora</th>
+              <th>Método</th>
+              <th class="num">Total</th>
+              <th>Comprobante</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows}
+          </tbody>
+        </table>
+      </div>
+      <div class="dialog-actions">
+        <button type="button" class="btn btn-primary" data-dialog-close>Cerrar</button>
+      </div>
+    `,
+    onMount(modal) {
+      modal.querySelectorAll('[data-view-receipt]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const sid = btn.getAttribute('data-view-receipt')
+          const found = salesList.find((x) => x.id === sid)
+          if (found) openSaleReceiptModal(found)
+        })
+      })
+    },
+  })
 }

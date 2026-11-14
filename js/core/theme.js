@@ -1,96 +1,70 @@
 /**
- * Persistencia de Modo Oscuro / Claro / Sistema.
- * Escucha cambios del sistema operativo (prefers-color-scheme) y sincroniza
- * el atributo data-theme en <html> además de guardar en localStorage.
+ * Sistema de Temas Nativo (Claro / Oscuro).
+ * Detecta inicialmente la preferencia del sistema operativo (prefers-color-scheme)
+ * y persiste la elección explícita del usuario en localStorage.
  */
 
-const THEME_STORAGE_KEY = 'tiendapp_theme'
+const THEME_STORAGE_KEY = 'kairo_theme_preference'
 
-let currentPreference = 'sistema' // 'sistema' | 'light' | 'dark'
-let mediaQuery = null
-const listeners = new Set()
+let currentTheme = 'dark'
 
-function getSystemDark() {
-  if (typeof window === 'undefined' || !window.matchMedia) return false
-  return window.matchMedia('(prefers-color-scheme: dark)').matches
-}
-
-export function resolveEffectiveTheme(pref = currentPreference) {
-  if (pref === 'dark') return 'dark'
-  if (pref === 'light') return 'light'
-  return getSystemDark() ? 'dark' : 'light'
-}
-
-function applyThemeToDOM() {
-  if (typeof document === 'undefined') return
-  const effective = resolveEffectiveTheme(currentPreference)
-  const root = document.documentElement
-  root.setAttribute('data-theme', effective)
-  root.setAttribute('data-theme-pref', currentPreference)
-  root.classList.toggle('dark', effective === 'dark')
-
-  for (const fn of listeners) {
-    try {
-      fn({ preference: currentPreference, effective })
-    } catch {
-      // ignore listener errors
-    }
+function detectSystemTheme() {
+  if (typeof window !== 'undefined' && window.matchMedia) {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
   }
+  return 'dark'
 }
 
 export function initTheme() {
+  let saved = null
   try {
-    const saved = typeof localStorage !== 'undefined' ? localStorage.getItem(THEME_STORAGE_KEY) : null
-    if (saved === 'dark' || saved === 'light' || saved === 'sistema') {
-      currentPreference = saved
-    } else {
-      currentPreference = 'sistema'
-    }
+    saved = localStorage.getItem(THEME_STORAGE_KEY)
   } catch {
-    currentPreference = 'sistema'
+    saved = null
   }
 
-  if (typeof window !== 'undefined' && window.matchMedia && !mediaQuery) {
-    mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-    mediaQuery.addEventListener('change', () => {
-      if (currentPreference === 'sistema') {
-        applyThemeToDOM()
+  if (saved === 'dark' || saved === 'light') {
+    currentTheme = saved
+  } else {
+    currentTheme = detectSystemTheme()
+  }
+
+  applyTheme(currentTheme)
+
+  if (typeof window !== 'undefined' && window.matchMedia) {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    mq.addEventListener('change', (e) => {
+      try {
+        if (!localStorage.getItem(THEME_STORAGE_KEY)) {
+          currentTheme = e.matches ? 'dark' : 'light'
+          applyTheme(currentTheme)
+        }
+      } catch {
+        // ignore
       }
     })
   }
 
-  applyThemeToDOM()
-  return { preference: currentPreference, effective: resolveEffectiveTheme() }
+  return currentTheme
+}
+
+function applyTheme(theme) {
+  if (typeof document === 'undefined') return
+  const normalized = theme === 'light' ? 'light' : 'dark'
+  document.documentElement.setAttribute('data-theme', normalized)
 }
 
 export function getTheme() {
-  return {
-    preference: currentPreference,
-    effective: resolveEffectiveTheme(currentPreference),
-  }
+  return currentTheme
 }
 
-export function setTheme(newPref) {
-  const valid = newPref === 'dark' || newPref === 'light' ? newPref : 'sistema'
-  currentPreference = valid
+export function toggleTheme() {
+  currentTheme = currentTheme === 'dark' ? 'light' : 'dark'
   try {
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(THEME_STORAGE_KEY, valid)
-    }
+    localStorage.setItem(THEME_STORAGE_KEY, currentTheme)
   } catch {
-    // ignore storage errors
+    // ignore
   }
-  applyThemeToDOM()
-  return getTheme()
-}
-
-export function cycleTheme() {
-  const order = ['sistema', 'light', 'dark']
-  const next = order[(order.indexOf(currentPreference) + 1) % order.length]
-  return setTheme(next)
-}
-
-export function onThemeChange(callback) {
-  listeners.add(callback)
-  return () => listeners.delete(callback)
+  applyTheme(currentTheme)
+  return currentTheme
 }

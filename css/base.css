@@ -1,5 +1,5 @@
 /**
- * css/base.css — Reset minimalista, tipografía del sistema y controles base.
+ * css/base.css — Reset Tipográfico y Primitivas de Interfaz
  */
 
 *,
@@ -12,35 +12,46 @@ html,
 body {
   margin: 0;
   padding: 0;
-  background-color: var(--bg-page);
-  color: var(--text-main);
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  font-size: 15px;
+  height: 100%;
+  background-color: var(--bg-canvas);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 13.5px;
   line-height: 1.45;
+  letter-spacing: -0.006em;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 h1, h2, h3, h4, p {
   margin: 0;
 }
 
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
 button,
 input,
 select,
 textarea {
-  font: inherit;
+  font-family: inherit;
+  font-size: inherit;
   color: inherit;
 }
 
 button {
   cursor: pointer;
+  user-select: none;
 }
 
 button:disabled {
   cursor: not-allowed;
-  opacity: 0.55;
+  opacity: 0.48;
 }
 
+/* Entradas de formulario */
 input[type="text"],
 input[type="search"],
 input[type="number"],
@@ -48,19 +59,37 @@ input[type="password"],
 input[type="date"],
 select {
   width: 100%;
-  padding: 0.55rem 0.75rem;
+  height: 34px;
+  padding: 0 10px;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border-default);
   background-color: var(--bg-surface);
-  color: var(--text-main);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  color: var(--text-primary);
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+input:hover,
+select:hover {
+  border-color: var(--border-strong);
 }
 
 input:focus,
 select:focus {
   outline: none;
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px var(--primary-soft);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-subtle);
+}
+
+/* Números tabulares para precios, cantidades y folios */
+.num,
+.mono,
+input[type="number"] {
+  font-variant-numeric: tabular-nums;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
 }
 
 .text-muted {
@@ -71,63 +100,71 @@ select:focus {
   color: var(--success);
 }
 
+.text-warning {
+  color: var(--warning);
+}
+
 .text-danger {
   color: var(--danger);
 }
 
-.line-through {
-  text-decoration: line-through;
-}
-
-.ml-auto {
-  margin-left: auto;
-}
-
-/* Botones universales */
+/* Botones */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.4rem;
-  padding: 0.55rem 0.95rem;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
   border-radius: var(--radius-sm);
-  font-weight: 600;
-  font-size: 0.88rem;
   border: 1px solid transparent;
-  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.08s ease;
+  font-weight: 500;
+  font-size: 13px;
+  white-space: nowrap;
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
 }
 
-.btn:active:not(:disabled) {
-  transform: scale(0.99);
+.btn-lg {
+  height: 40px;
+  font-size: 13.5px;
+  font-weight: 600;
 }
 
 .btn-sm {
-  padding: 0.4rem 0.75rem;
-  font-size: 0.82rem;
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
 }
 
 .btn-xs {
-  padding: 0.28rem 0.55rem;
-  font-size: 0.76rem;
+  height: 24px;
+  padding: 0 8px;
+  font-size: 11.5px;
+  border-radius: var(--radius-xs);
+}
+
+.btn-block {
+  width: 100%;
 }
 
 .btn-primary {
-  background-color: var(--primary);
-  color: #ffffff;
+  background-color: var(--accent);
+  color: var(--accent-fg);
 }
 
 .btn-primary:hover:not(:disabled) {
-  background-color: var(--primary-hover);
+  background-color: var(--accent-hover);
 }
 
 .btn-outline {
   background-color: var(--bg-surface);
-  border-color: var(--border-strong);
-  color: var(--text-main);
+  border-color: var(--border-default);
+  color: var(--text-primary);
 }
 
 .btn-outline:hover:not(:disabled) {
   background-color: var(--bg-subtle);
+  border-color: var(--border-strong);
 }
 
 .btn-ghost {
@@ -137,6 +174,7 @@ select:focus {
 
 .btn-ghost:hover:not(:disabled) {
   background-color: var(--bg-subtle);
+  color: var(--text-primary);
 }
 
 .btn-danger {
@@ -144,61 +182,69 @@ select:focus {
   color: #ffffff;
 }
 
-.btn-danger-outline {
-  background-color: transparent;
-  border-color: var(--danger);
-  color: var(--danger);
-}
-
-.btn-ghost-danger {
-  background-color: transparent;
-  color: var(--danger);
-  border: none;
-}
-
 .btn-icon {
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border-color);
-  background: var(--bg-subtle);
+  border: 1px solid var(--border-default);
+  background-color: var(--bg-surface);
+  color: var(--text-secondary);
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  transition: background-color 0.12s ease, color 0.12s ease;
 }
 
-/* Badges */
-.badge {
+.btn-icon:hover:not(:disabled) {
+  background-color: var(--bg-subtle);
+  color: var(--text-primary);
+}
+
+.btn-icon-subtle {
+  border-color: transparent;
+  background-color: transparent;
+}
+
+/* Etiquetas de estado */
+.status-badge {
   display: inline-flex;
   align-items: center;
-  padding: 0.18rem 0.55rem;
-  border-radius: 999px;
-  font-size: 0.74rem;
-  font-weight: 700;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: var(--radius-xs);
+  font-size: 11px;
+  font-weight: 600;
   letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 
 .badge-neutral {
   background-color: var(--bg-subtle);
   color: var(--text-secondary);
+  border: 1px solid var(--border-default);
 }
 
-.badge-ok {
-  background-color: var(--success-soft);
+.badge-accent {
+  background-color: var(--accent-subtle);
+  color: var(--accent);
+}
+
+.badge-success {
+  background-color: var(--success-bg);
   color: var(--success);
 }
 
-.badge-fifo {
-  background-color: var(--primary-soft);
-  color: var(--primary-text);
-}
-
-.badge-owner {
-  background-color: var(--owner-soft);
-  color: var(--owner-text);
+.badge-warning {
+  background-color: var(--warning-bg);
+  color: var(--warning);
 }
 
 .badge-danger {
-  background-color: var(--danger-soft);
+  background-color: var(--danger-bg);
   color: var(--danger);
+}
+
+.svg-icon {
+  flex-shrink: 0;
 }

@@ -1,51 +1,51 @@
+import { icon } from './icons.js'
+
 /**
- * Sistema de Modales Limpios (Dialog nativo / Overlay accesible en Vanilla JS).
- * Permite abrir formularios de productos, lotes FIFO, confirmación de PIN o auditoría
- * sobre la misma pantalla sin perder el estado ni el carrito.
+ * Gestor de Diálogos Modales Sobrios y Accesibles.
  */
 
-let activeModalRoot = null
+let currentModal = null
 
 export function closeDialog() {
-  if (activeModalRoot) {
-    activeModalRoot.remove()
-    activeModalRoot = null
+  if (currentModal) {
+    currentModal.remove()
+    currentModal = null
   }
 }
 
-export function openDialog({ title, subtitle = '', contentHTML = '', width = '560px', onMount }) {
+export function openDialog({ title, subtitle = '', bodyHTML = '', maxWidth = '540px', onMount }) {
   closeDialog()
 
   const backdrop = document.createElement('div')
-  backdrop.className = 'modal-backdrop'
+  backdrop.className = 'dialog-backdrop'
   backdrop.setAttribute('role', 'dialog')
   backdrop.setAttribute('aria-modal', 'true')
 
   backdrop.innerHTML = `
-    <div class="modal-card" style="max-width: ${width}">
-      <header class="modal-header">
+    <div class="dialog-panel" style="max-width: ${maxWidth}">
+      <header class="dialog-header">
         <div>
-          <h3 class="modal-title">${title}</h3>
-          ${subtitle ? `<p class="modal-subtitle">${subtitle}</p>` : ''}
+          <h3 class="dialog-title">${title}</h3>
+          ${subtitle ? `<p class="dialog-subtitle">${subtitle}</p>` : ''}
         </div>
-        <button type="button" class="btn-icon modal-close-btn" aria-label="Cerrar ventana" data-close-modal>
-          ✕
+        <button type="button" class="btn-icon" data-dialog-close aria-label="Cerrar ventana">
+          ${icon('close', 16)}
         </button>
       </header>
-      <div class="modal-body">
-        ${contentHTML}
+      <div class="dialog-body">
+        ${bodyHTML}
       </div>
     </div>
   `
 
   backdrop.addEventListener('click', (e) => {
-    if (e.target === backdrop || e.target.closest('[data-close-modal]')) {
+    if (e.target === backdrop || e.target.closest('[data-dialog-close]')) {
       closeDialog()
     }
   })
 
   document.body.appendChild(backdrop)
-  activeModalRoot = backdrop
+  currentModal = backdrop
 
   if (typeof onMount === 'function') {
     onMount(backdrop, closeDialog)

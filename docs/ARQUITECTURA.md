@@ -1,58 +1,32 @@
-# Arquitectura y Modelo de Datos — Tiendapp Vanilla FIFO
+# Arquitectura Técnica y Modelo de Datos — Kairo POS
 
-## 1. Principios de Diseño
+## 1. Modelo de Datos Relacional (`backend/migrations/001_initial_schema.sql`)
 
-1. **Cero Sobreingeniería:** Interfaz estática 100 % HTML5, CSS3 y Vanilla JavaScript (ES Modules), sin dependencias de compilación ni bibliotecas externas.
-2. **Pantalla Única Integrada:** Tanto el **Tendero** como el **Dueño** operan sobre el mismo documento (`index.html`). Al activar el rol **Dueño**, se habilitan en la misma vista los botones de edición en cada tarjeta y el panel inferior de control de lotes FIFO, conservando intacto el carrito de compra.
-3. **Existencias Derivadas de Lotes (FIFO):** El producto ya no almacena un campo fijo `cantidad_actual`. Su disponibilidad se calcula en tiempo real sumando `cantidad_disponible` de sus lotes vigentes (no vencidos).
+La base de datos relacional SQLite 3 opera con `PRAGMA foreign_keys = ON` y `PRAGMA journal_mode = WAL`.
 
----
-
-## 2. Almacenes en `IndexedDB` (`tiendapp_vanilla_db`)
-
-### 2.1. `productos`
-Datos maestros del artículo:
-- `id`: Identificador único (`prd-...`).
-- `tienda_id`: Identificador de la tienda local.
-- `codigo_barras`: Código EAN/SKU único por tienda.
-- `nombre`: Nombre comercial.
-- `categoria`: Categoría (`Granos`, `Lacteos`, `Abarrotes`, `Bebidas`, etc.).
-- `unidad_medida`: `unidad`, `kg`, `libra`, `litro`, `gramo`, `caja`.
-- `precio_venta`: Precio unitario de venta al público (COP).
-- `stock_minimo`: Umbral para alerta visual de bajo inventario.
-- `es_frecuente`: Booleano para destacar en el mostrador POS.
-- `foto_url`: Data URI JPEG comprimido mediante `<canvas>` o `null` (genera avatar SVG automático).
-
-### 2.2. `lotes`
-Cada entrada o compra de mercancía genera un lote independiente:
-- `id`: Identificador único (`lot-...`).
-- `tienda_id`: Tienda propietaria.
-- `producto_id`: Referencia al producto.
-- `codigo_lote`: Código identificador del lote (ej. `L-ARR-01`).
-- `fecha_entrada`: Fecha de ingreso (`YYYY-MM-DD`). Determina la prioridad **FIFO**.
-- `fecha_vencimiento`: Fecha opcional (`YYYY-MM-DD` o `null`). Si es anterior a la fecha actual, el lote queda **bloqueado automáticamente** para la venta.
-- `costo_unitario`: Costo de compra de esa entrada específica.
-- `cantidad_inicial`: Cantidad ingresada originalmente.
-- `cantidad_disponible`: Saldo actual del lote.
-
-### 2.3. `ventas`
-Incluye el detalle de líneas vendidas (`detalles`) y las asignaciones exactas por lote (`asignaciones_lote` / `AsignacionVentaLote`):
-- `id`, `tienda_id`, `fecha_venta`, `total`, `metodo_pago`, `monto_recibido`, `cambio_entregado`, `vendedor_nombre`, `vendedor_rol`, `estado` (`COMPLETADA` | `ANULADA`).
-- `detalles[]`:
-  - `producto_id`, `producto_nombre`, `cantidad`, `precio_unitario`, `costo_unitario_snapshot`, `subtotal`.
-  - `asignaciones_lote[]`: Lista de `{ lote_id, codigo_lote, cantidad_descontada, costo_unitario }`.
-
-### 2.4. `movimientos` (`MovimientoInventario`)
-Kardex auditable por lote:
-- `id`, `tienda_id`, `producto_id`, `lote_id`, `codigo_lote`, `tipo` (`entrada_lote`, `ajuste_lote`, `venta_fifo`, `anulacion_venta`, `baja_lote`), `cantidad`, `stock_anterior`, `stock_nuevo`, `costo_unitario`, `motivo`, `referencia_id`, `usuario_nombre`, `created_at`.
+### Tablas Principales
+1. **`roles`**: Catálogo cerrado (`CHECK (code IN ('dueno', 'tendero'))`).
+2. **`payment_methods`**: Métodos de pago soportados (`efectivo`, `nequi`, `daviplata`).
+3. **`users`**: Usuarios con `username` único, `password_hash` (`PBKDF2-HMAC-SHA256`), `role_code` (`FK -> roles.code`) e `is_active`.
+4. **`sessions`**: Sesiones activas en servidor identificadas por `token_hash` (`SHA-256` del token opaco), con `expires_at` y `revoked_at`.
+5. **`categories`**: Clasificación de productos (`name` único).
+6. **`products`**: Artículos con `sku` único, `barcode` opcional único, `unit` (`und`, `kg`, `lb`, `lt`, `gr`, `caja`), `sale_price` y `min_stock`.
+7. **`lots`**: Lotes asociados a cada producto (`product_id`, `lot_number` único por producto, `entry_date`, `expiration_date` opcional, `unit_cost`, `initial_quantity`, `available_quantity`).
+8. **`sales`**: Cabecera de venta con `folio` secuencial (`POS-000001`), `client_operation_id` único para idempotencia, `user_id` responsable, `payment_method_code`, `subtotal`, `total`, `amount_received`, `change_amount` y `created_at`.
+9. **`sale_items`**: Detalle por línea vendida con snapshot inmutable de nombre, SKU, unidad y precio unitario.
+10. **`sale_lot_allocations`**: Desglose exacto de qué lotes y cuántas unidades se descontaron para cada línea de venta.
+11. **`inventory_movements`**: Kardex auditable (`ENTRADA_LOTE`, `SALIDA_VENTA`, `ENTRADA_AJUSTE`, `SALIDA_MERMA`, `AJUSTE_DIRECTO`) con saldo anterior, saldo nuevo, costo, motivo y usuario responsable.
 
 ---
 
-## 3. Regla de Descuento FIFO + FEFO
+## 2. Política de Salida de Inventario (FEFO + FIFO)
 
-1. Se filtran los lotes del producto con `cantidad_disponible > 0` y que **no estén vencidos** (`fecha_vencimiento === null || fecha_vencimiento >= hoy`).
-2. Se ordenan por:
-   - `fecha_entrada` ascendente (**FIFO**: primero en entrar, primero en salir).
-   - En caso de empate en la fecha de entrada, `fecha_vencimiento` más próxima primero (**FEFO**).
-3. Se recorre la cola descontando hasta cubrir la cantidad solicitada. Si la suma de lotes vigentes es menor a la cantidad pedida, la venta se rechaza atómicamente sin alterar ningún lote.
-4. Si el **Dueño** anula una venta, cada registro de `asignaciones_lote` devuelve su `cantidad_descontada` al `lote_id` original y registra un movimiento `anulacion_venta`.
+Al registrar una venta en `POST /api/sales` dentro de una transacción `BEGIN IMMEDIATE`:
+1. Se consultan todos los lotes del producto con `available_quantity > 0`.
+2. Se **excluyen y bloquean automáticamente** los lotes cuya `expiration_date` sea anterior a la fecha actual (`expiration_date < today`).
+3. Los lotes vigentes se ordenan siguiendo la regla **FEFO + FIFO** (`sort_lots_fefo_fifo` en `backend/services.py`):
+   - Primero los lotes que tienen fecha de vencimiento, ordenados por `expiration_date ASC` (**FEFO**: primero en vencer, primero en salir).
+   - Luego los lotes no perecederos (sin fecha de vencimiento).
+   - En caso de empate en vencimiento, se ordenan por `entry_date ASC` (**FIFO**: primero en entrar, primero en salir).
+4. Si la suma de existencias vigentes es menor a la cantidad solicitada, la transacción completa hace `ROLLBACK` y devuelve un error `400` detallando el disponible real.
+5. Si las existencias son suficientes, se descuentan las unidades de uno o varios lotes en orden, registrando tanto `sale_lot_allocations` como los registros `SALIDA_VENTA` en `inventory_movements`.

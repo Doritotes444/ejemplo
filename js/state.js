@@ -1,196 +1,51 @@
-import { roundQty, clampQty, isBulkUnit } from './utils/quantities.js'
 import { roundMoney } from './utils/money.js'
-import { getSessionUser, getCartStorageKey } from './core/session.js'
+import { roundQty, clampQty, isBulkUnit } from './utils/quantities.js'
 
 /**
- * Estado reactivo compartido y lógica pura del Carrito de Venta.
- * Rescata y corrige la lógica de CartContext.jsx:
- * - El carrito se aísla por tienda y usuario (tiendapp_cart:{tienda}:{usuario}).
- * - Valida cantidades finitas, precisión decimal (granel) y disponibilidad real derivada de lotes.
- * - Conserva el carrito activo cuando el Dueño alterna entre vistas o modales.
+ * Gestión Centralizada de Estado de la SPA y Operaciones del Carrito POS.
  */
 
-export function addItemToCartList(cartList, producto, requestedDelta = 1) {
-  const maxStock = roundQty(producto?.cantidad_disponible ?? producto?.cantidad_actual ?? 0)
-  if (!producto?.id || maxStock <= 0) {
-    return { cart: cartList, added: false, reason: 'Sin existencias disponibles para vender.' }
-  }
-
-  const delta = roundQty(requestedDelta)
-  if (delta <= 0) {
-    return { cart: cartList, added: false, reason: 'La cantidad debe ser mayor a cero.' }
-  }
-
-  const existing = cartList.find((item) => item.id === producto.id)
-  if (existing) {
-    const nextQty = roundQty(existing.cantidad + delta)
-    if (nextQty > maxStock) {
-      return {
-        cart: cartList.map((item) =>
-          item.id === producto.id
-            ? { ...item, cantidad: maxStock, cantidad_disponible: maxStock }
-            : item
-        ),
-        added: false,
-        reason: `Stock máximo alcanzado (${maxStock} ${producto.unidad_medida || 'und'}).`,
-      }
-    }
-    return {
-      cart: cartList.map((item) =>
-        item.id === producto.id
-          ? {
-              ...item,
-              nombre: producto.nombre,
-              precio_venta: roundMoney(producto.precio_venta),
-              unidad_medida: producto.unidad_medida || 'unidad',
-              cantidad_disponible: maxStock,
-              cantidad: nextQty,
-            }
-          : item
-      ),
-      added: true,
-      reason: null,
-    }
-  }
-
-  const initialQty = isBulkUnit(producto.unidad_medida)
-    ? Math.min(delta, maxStock)
-    : Math.min(Math.max(1, Math.round(delta)), maxStock)
-
-  if (initialQty <= 0) {
-    return { cart: cartList, added: false, reason: 'Sin stock suficiente.' }
-  }
-
-  return {
-    cart: [
-      ...cartList,
-      {
-        id: producto.id,
-        codigo_barras: producto.codigo_barras,
-        nombre: producto.nombre,
-        categoria: producto.categoria,
-        unidad_medida: producto.unidad_medida || 'unidad',
-        precio_venta: roundMoney(producto.precio_venta),
-        foto_url: producto.foto_url || null,
-        cantidad_disponible: maxStock,
-        cantidad: roundQty(initialQty),
-      },
-    ],
-    added: true,
-    reason: null,
-  }
-}
-
-export function decrementItemInCartList(cartList, productoId, step = 1) {
-  const dec = roundQty(step)
-  return cartList
-    .map((item) => {
-      if (item.id !== productoId) return item
-      return { ...item, cantidad: roundQty(item.cantidad - dec) }
-    })
-    .filter((item) => item.cantidad > 0)
-}
-
-export function setItemQuantityInCartList(cartList, productoId, nuevaCantidad, maxAvailableOverride = null) {
-  const parsed = roundQty(nuevaCantidad)
-  if (parsed <= 0) {
-    return cartList.filter((item) => item.id !== productoId)
-  }
-  return cartList
-    .map((item) => {
-      if (item.id !== productoId) return item
-      const limit =
-        maxAvailableOverride != null
-          ? roundQty(maxAvailableOverride)
-          : roundQty(item.cantidad_disponible)
-      const clamped = clampQty(parsed, limit)
-      return { ...item, cantidad: clamped, cantidad_disponible: limit }
-    })
-    .filter((item) => item.cantidad > 0)
-}
-
-export function removeItemFromCartList(cartList, productoId) {
-  return cartList.filter((item) => item.id !== productoId)
-}
-
-export function calculateCartTotal(cartList) {
-  return roundMoney(
-    cartList.reduce(
-      (acc, item) => acc + roundMoney(item.precio_venta) * roundQty(item.cantidad),
-      0
-    )
-  )
-}
-
-// Estado global de la SPA
 const state = {
-  user: getSessionUser(),
-  products: [], // Productos enriquecidos con stock derivado de sus lotes
+  booting: true,
+  initialized: false,
+  user: null,
+  route: 'pos',
+
+  // Datos cargados desde el servidor
+  categories: [],
+  products: [],
   lots: [],
-  sales: [],
   movements: [],
+  sales: [],
+  salesSummary: { count: 0, grand_total: 0, by_payment_method: { efectivo: 0, nequi: 0, daviplata: 0 } },
+  users: [],
+
+  // Estado operativo del POS
   cart: [],
-  searchQuery: '',
-  categoryFilter: 'Todas',
-  onlyFrequent: false,
-  paymentMethod: 'Efectivo',
+  posSearch: '',
+  posCategory: 'ALL',
+  paymentMethod: 'efectivo',
   amountReceived: '',
-  customerName: '',
-  ownerPanelTab: 'lotes', // 'lotes' | 'ventas' | 'kardex'
-  ownerDrawerOpen: false, // Panel integrado para Dueño en la misma pantalla
-  feedback: null, // { type: 'ok'|'error'|'info', text: string }
+  saleNotes: '',
+  lastCompletedSale: null,
+
+  // Filtros en vistas de Dueño
+  productSearch: '',
+  productCategoryFilter: 'ALL',
+  productShowInactive: true,
+  lotFilterStatus: 'ALL',
+  lotFilterProduct: 'ALL',
+  salesFilterFrom: '',
+  salesFilterTo: '',
+  salesFilterUser: '',
+  salesFilterProduct: '',
+  salesFilterMethod: '',
+
+  // Notificación discreta
+  toast: null,
 }
 
-const subscribers = new Set()
-
-function persistCart() {
-  try {
-    if (typeof localStorage !== 'undefined') {
-      const key = getCartStorageKey(state.user)
-      localStorage.setItem(key, JSON.stringify(state.cart))
-    }
-  } catch {
-    // ignore storage errors
-  }
-}
-
-export function loadSavedCartForCurrentUser() {
-  try {
-    if (typeof localStorage !== 'undefined') {
-      const key = getCartStorageKey(state.user)
-      const raw = localStorage.getItem(key)
-      state.cart = raw ? JSON.parse(raw) : []
-    }
-  } catch {
-    state.cart = []
-  }
-  return state.cart
-}
-
-export function reconcileCartWithCatalog(products = state.products) {
-  const prodMap = new Map(products.map((p) => [p.id, p]))
-  const updated = []
-  for (const item of state.cart) {
-    const fresh = prodMap.get(item.id)
-    if (!fresh || fresh.is_active === false) continue
-    const available = roundQty(fresh.cantidad_disponible)
-    if (available <= 0) continue
-    const validQty = Math.min(roundQty(item.cantidad), available)
-    if (validQty > 0) {
-      updated.push({
-        ...item,
-        nombre: fresh.nombre,
-        precio_venta: roundMoney(fresh.precio_venta),
-        unidad_medida: fresh.unidad_medida,
-        foto_url: fresh.foto_url,
-        cantidad_disponible: available,
-        cantidad: validQty,
-      })
-    }
-  }
-  state.cart = updated
-  persistCart()
-}
+const listeners = new Set()
 
 export function getState() {
   return state
@@ -198,39 +53,169 @@ export function getState() {
 
 export function setState(patch, notify = true) {
   Object.assign(state, patch)
-  if ('cart' in patch) {
-    persistCart()
-  }
   if (notify) {
-    emitChange()
+    emitStateChange()
   }
 }
 
-export function subscribe(fn) {
-  subscribers.add(fn)
-  return () => subscribers.delete(fn)
+export function subscribe(listener) {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
 }
 
-export function emitChange() {
-  for (const fn of subscribers) {
+export function emitStateChange() {
+  for (const fn of listeners) {
     try {
       fn(state)
     } catch (err) {
-      console.error('Error en suscriptor de estado:', err)
+      console.error('State listener error:', err)
     }
   }
 }
 
-export function showFeedback(type, text, autoClearMs = 4500) {
-  state.feedback = { type, text, id: Date.now() }
-  emitChange()
-  if (autoClearMs > 0 && typeof setTimeout !== 'undefined') {
-    const currentId = state.feedback.id
-    setTimeout(() => {
-      if (state.feedback?.id === currentId) {
-        state.feedback = null
-        emitChange()
+let toastTimer = null
+export function showToast(type, message, durationMs = 3800) {
+  if (toastTimer) clearTimeout(toastTimer)
+  state.toast = { type, message, id: Date.now() }
+  emitStateChange()
+  if (durationMs > 0) {
+    const currentId = state.toast.id
+    toastTimer = setTimeout(() => {
+      if (state.toast?.id === currentId) {
+        state.toast = null
+        emitStateChange()
       }
-    }, autoClearMs)
+    }, durationMs)
   }
+}
+
+// =============================================================================
+// Lógica pura del Carrito POS
+// =============================================================================
+
+export function addProductToCart(cartList, product, delta = 1) {
+  const maxStock = roundQty(product?.available_stock ?? 0)
+  if (!product || !product.is_active || maxStock <= 0) {
+    return {
+      cart: cartList,
+      ok: false,
+      error: `Sin existencias disponibles para "${product?.name || 'el producto'}".`,
+    }
+  }
+
+  const step = roundQty(delta)
+  if (step <= 0) {
+    return { cart: cartList, ok: false, error: 'Cantidad inválida.' }
+  }
+
+  const existing = cartList.find((item) => item.product_id === product.id)
+  if (existing) {
+    const nextQty = roundQty(existing.quantity + step)
+    if (nextQty > maxStock) {
+      return {
+        cart: cartList.map((item) =>
+          item.product_id === product.id
+            ? { ...item, quantity: maxStock, available_stock: maxStock }
+            : item
+        ),
+        ok: false,
+        error: `Existencia máxima alcanzada (${maxStock} ${product.unit}).`,
+      }
+    }
+    return {
+      cart: cartList.map((item) =>
+        item.product_id === product.id
+          ? {
+              ...item,
+              name: product.name,
+              sku: product.sku,
+              unit: product.unit,
+              unit_price: roundMoney(product.sale_price),
+              available_stock: maxStock,
+              quantity: nextQty,
+            }
+          : item
+      ),
+      ok: true,
+      error: null,
+    }
+  }
+
+  const initialQty = isBulkUnit(product.unit)
+    ? Math.min(step, maxStock)
+    : Math.min(Math.max(1, Math.round(step)), maxStock)
+
+  return {
+    cart: [
+      ...cartList,
+      {
+        product_id: product.id,
+        sku: product.sku,
+        name: product.name,
+        unit: product.unit,
+        unit_price: roundMoney(product.sale_price),
+        available_stock: maxStock,
+        quantity: roundQty(initialQty),
+      },
+    ],
+    ok: true,
+    error: null,
+  }
+}
+
+export function updateCartItemQty(cartList, productId, rawQuantity, maxOverride = null) {
+  const qty = roundQty(rawQuantity)
+  if (qty <= 0) {
+    return cartList.filter((item) => item.product_id !== productId)
+  }
+  return cartList
+    .map((item) => {
+      if (item.product_id !== productId) return item
+      const maxStock = maxOverride != null ? roundQty(maxOverride) : roundQty(item.available_stock)
+      const clamped = clampQty(qty, maxStock)
+      return { ...item, quantity: clamped, available_stock: maxStock }
+    })
+    .filter((item) => item.quantity > 0)
+}
+
+export function removeCartItem(cartList, productId) {
+  return cartList.filter((item) => item.product_id !== productId)
+}
+
+export function calculateCartTotals(cartList) {
+  const subtotal = roundMoney(
+    cartList.reduce(
+      (sum, item) => sum + roundMoney(item.unit_price) * roundQty(item.quantity),
+      0
+    )
+  )
+  return {
+    subtotal,
+    total: subtotal,
+    itemsCount: cartList.length,
+  }
+}
+
+export function syncCartWithProducts(products) {
+  const map = new Map(products.map((p) => [p.id, p]))
+  const synced = []
+  for (const item of state.cart) {
+    const fresh = map.get(item.product_id)
+    if (!fresh || !fresh.is_active) continue
+    const avail = roundQty(fresh.available_stock)
+    if (avail <= 0) continue
+    const q = Math.min(roundQty(item.quantity), avail)
+    if (q > 0) {
+      synced.push({
+        ...item,
+        name: fresh.name,
+        sku: fresh.sku,
+        unit: fresh.unit,
+        unit_price: roundMoney(fresh.sale_price),
+        available_stock: avail,
+        quantity: q,
+      })
+    }
+  }
+  state.cart = synced
 }
