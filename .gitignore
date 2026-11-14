@@ -1,46 +1,17 @@
 .env
 .venv/
-.venvpython/
 __pycache__/
-*.pyc
-.claude/
-
-# Node
 node_modules/
 dist/
 .cache/
 *.local
-
-# IDEs
 .vscode/
 .idea/
 *.swp
 *.swo
-
-# OS
 .DS_Store
 Thumbs.db
 desktop.ini
-
-# Logs
 *.log
-logs/
-
-# Testing
-.pytest_cache/
-htmlcov/
-.coverage
-
-# Build
-*.egg-info/
-build/
-*.whl
-
-# Binaries & Media
-*.exe
-*.mp4
-*.zip
 *.db
-graphify-out/
 scratch/
-frontend/dist/

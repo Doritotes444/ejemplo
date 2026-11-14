@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Tiendapp · Suite de Pruebas Unitarias (Vanilla JS)</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #0f172a;
+      color: #f8fafc;
+      padding: 2rem;
+      max-width: 860px;
+      margin: 0 auto;
+    }
+    h1 { margin-bottom: 0.4rem; }
+    .summary {
+      padding: 1rem;
+      border-radius: 10px;
+      margin: 1rem 0;
+      font-weight: 700;
+    }
+    .pass-bg { background: rgba(22, 163, 74, 0.2); border: 1px solid #22c55e; color: #86efac; }
+    .fail-bg { background: rgba(220, 38, 38, 0.2); border: 1px solid #ef4444; color: #fca5a5; }
+    ul { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+    li {
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      background: #1e293b;
+      border-left: 4px solid #64748b;
+    }
+    li.ok { border-left-color: #22c55e; }
+    li.fail { border-left-color: #ef4444; background: #311b1b; }
+  </style>
+</head>
+<body>
+  <h1>Suite de Pruebas — Tiendapp FIFO (Vanilla JS)</h1>
+  <div id="test-summary" class="summary">Ejecutando pruebas...</div>
+  <ul id="test-list"></ul>
+
+  <script type="module">
+    import { registerCartTests } from './cart.test.js'
+    import { registerLotsTests } from './lots.test.js'
+    import { registerSalesTests } from './sales.test.js'
+
+    const tests = []
+    function test(name, fn) {
+      tests.push({ name, fn })
+    }
+    function assert(condition, message) {
+      if (!condition) {
+        throw new Error(message || 'Assertion failed')
+      }
+    }
+
+    registerCartTests(test, assert)
+    registerLotsTests(test, assert)
+    registerSalesTests(test, assert)
+
+    const listEl = document.getElementById('test-list')
+    const summaryEl = document.getElementById('test-summary')
+    let passed = 0
+    let failed = 0
+
+    for (const t of tests) {
+      const li = document.createElement('li')
+      try {
+        await t.fn()
+        passed += 1
+        li.className = 'ok'
+        li.textContent = `✓ ${t.name}`
+      } catch (err) {
+        failed += 1
+        li.className = 'fail'
+        li.textContent = `✕ ${t.name} — ${err.message}`
+      }
+      listEl.appendChild(li)
+    }
+
+    summaryEl.className = `summary ${failed === 0 ? 'pass-bg' : 'fail-bg'}`
+    summaryEl.textContent = `Resultados: ${passed} aprobadas, ${failed} fallidas (Total: ${tests.length})`
+    window.__TEST_RESULTS__ = { passed, failed, total: tests.length }
+  </script>
+</body>
+</html>
