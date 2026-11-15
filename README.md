@@ -4,6 +4,14 @@ Plataforma comercial **Mobile-First** de Punto de Venta (POS) y Gestión de Inve
 
 ---
 
+## Despliegue en Vivo (Web Pública)
+
+- **Landing Page y Onboarding de Tienda:** [https://doritotes444.github.io/ejemplo/](https://doritotes444.github.io/ejemplo/)
+- **Panel de Aplicación (POS / Inventario):** [https://doritotes444.github.io/ejemplo/app/](https://doritotes444.github.io/ejemplo/app/)
+- **Base de Datos JSON (400 Productos en COP):** [https://doritotes444.github.io/ejemplo/data.json](https://doritotes444.github.io/ejemplo/data.json)
+
+---
+
 ## 1. Arquitectura de Entornos Separados (`/` vs `/app`)
 
 El proyecto separa estrictamente el entorno público de captación y registro del entorno operativo de la aplicación:

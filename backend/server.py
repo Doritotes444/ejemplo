@@ -123,8 +123,15 @@ class KairoRequestHandler(SimpleHTTPRequestHandler):
             self._send_json({"error": "Acceso restringido."}, status=403)
             return
 
-        # Si solicita /app o /app/, servir /app/index.html (entorno de aplicación POS/Inventario)
-        if parsed.path == "/app" or parsed.path.startswith("/app/"):
+        # Si solicita /app sin barra final, redirigir a /app/ para resolver rutas relativas correctamente
+        if parsed.path == "/app":
+            self.send_response(301)
+            self.send_header("Location", "/app/")
+            self.end_headers()
+            return
+
+        # Si solicita /app/, servir /app/index.html (entorno de aplicación POS/Inventario)
+        if parsed.path.startswith("/app/"):
             app_candidate = ROOT_DIR / parsed.path.lstrip("/")
             if app_candidate.is_file():
                 return super().do_GET()
