@@ -1,8 +1,7 @@
 /**
  * Definición de Roles y Permisos en el Cliente.
- * NOTA: La autorización real se aplica estrictamente en el servidor (backend/security.py).
- * Este módulo adapta la interfaz SPA para que al Tendero nunca le aparezcan vistas ni
- * controles administrativos.
+ * - TENDERO: acceso a POS y al Muro de Reseñas privado (ningún acceso administrativo a inventario/lotes/productos/usuarios).
+ * - DUEÑO: acceso completo a POS, Productos, Lotes, Inventario/Kardex, Ventas, Usuarios, Muro de Reseñas y Ajustes.
  */
 
 export const ROLES = {
@@ -10,8 +9,18 @@ export const ROLES = {
   TENDERO: 'tendero',
 }
 
-export const OWNER_ROUTES = new Set(['pos', 'products', 'inventory', 'lots', 'sales', 'users'])
-export const TENDERO_ROUTES = new Set(['pos'])
+export const OWNER_ROUTES = new Set([
+  'pos',
+  'products',
+  'inventory',
+  'lots',
+  'sales',
+  'users',
+  'reviews',
+  'settings',
+])
+
+export const TENDERO_ROUTES = new Set(['pos', 'reviews'])
 
 export function isOwner(user) {
   return user?.role === ROLES.DUENO

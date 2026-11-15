@@ -8,12 +8,22 @@ import {
   showToast,
 } from '../state.js'
 import { registerSaleRequest, generateClientOpId, fetchSales } from '../services/sales.js'
+import {
+  getUISettingsSync,
+  saveUISettingsSync,
+  buildAestheticFallbackSVG,
+} from '../core/localStore.js'
 import { formatCOP, BILLETES_RAPIDOS, calculateChange } from '../utils/money.js'
 import { isBulkUnit, formatQty } from '../utils/quantities.js'
 import { icon } from './icons.js'
 import { openSaleReceiptModal } from './receipt.js'
 import { openDialog } from './dialog.js'
-import { openBarcodeScannerModal, openTransferVerifierModal } from './hardware.js'
+import {
+  openBarcodeScannerModal,
+  openTransferVerifierModal,
+  handleScannedCode,
+} from './hardware.js'
+import { openProductFormModal } from './lots.js'
 
 const PAYMENT_METHODS = [
   { code: 'efectivo', label: 'Efectivo' },
@@ -46,7 +56,23 @@ function getFilteredPOSProducts(st) {
   })
 }
 
+let inlineHtml5Scanner = null
+let inlineScannerRunning = false
+
+export async function stopInline50vhScanner() {
+  if (inlineHtml5Scanner && inlineScannerRunning) {
+    try {
+      await inlineHtml5Scanner.stop()
+      await inlineHtml5Scanner.clear()
+    } catch {
+      // ignore
+    }
+    inlineScannerRunning = false
+  }
+}
+
 export function renderPOSViewHTML(st) {
+  const ui = getUISettingsSync()
   const allFiltered = getFilteredPOSProducts(st)
   const limit = st.posSearch ? 120 : st.posVisibleLimit || 60
   const visibleProducts = allFiltered.slice(0, limit)
@@ -64,91 +90,114 @@ export function renderPOSViewHTML(st) {
       ? calculateChange(receivedNum, total)
       : 0
 
-  const rowsHTML =
-    visibleProducts.length === 0
-      ? `
-        <div class="empty-state">
-          <p class="empty-title">No hay productos disponibles para este criterio</p>
-          <p class="empty-subtitle">Ajusta el término de búsqueda o escanea un código de barras válido.</p>
-        </div>
-      `
-      : `
-        <div class="pos-catalog-grid">
-          ${visibleProducts
-            .map((p) => {
-              const avail = Number(p.available_stock || 0)
-              const isOut = avail <= 0
-              const isLow = !isOut && p.is_low_stock
-              const inCart = st.cart.find((c) => c.product_id === p.id)
+  const isStoreBlank = (st.products || []).length === 0
 
-              let stockBadge = `<span class="status-badge badge-success">${formatQty(avail, p.unit)}</span>`
-              if (isOut) {
-                stockBadge = `<span class="status-badge badge-danger">Agotado</span>`
-              } else if (isLow) {
-                stockBadge = `<span class="status-badge badge-warning">${formatQty(avail, p.unit)}</span>`
-              }
+  const rowsHTML = isStoreBlank
+    ? `
+      <div class="empty-state blank-store-cta">
+        <div class="blank-store-icon">${icon('products', 28)}</div>
+        <h3 class="empty-title">Tu tienda está lista y en blanco (Cero datos ficticios)</h3>
+        <p class="empty-subtitle">Comienza el Paso 1 del tutorial registrando tu primer producto real para habilitar las ventas en el POS.</p>
+        <button type="button" class="btn btn-primary btn-lg" id="btn-empty-pos-create-first">
+          ${icon('plus', 16)}
+          <span>Crear Mi Primer Producto (Paso 1)</span>
+        </button>
+      </div>
+    `
+    : visibleProducts.length === 0
+    ? `
+      <div class="empty-state">
+        <p class="empty-title">No hay productos disponibles para este criterio</p>
+        <p class="empty-subtitle">Ajusta el término de búsqueda o escanea un código de barras válido.</p>
+      </div>
+    `
+    : `
+      <div class="pos-catalog-grid">
+        ${visibleProducts
+          .map((p) => {
+            const avail = Number(p.available_stock || 0)
+            const isOut = avail <= 0
+            const isLow = !isOut && p.is_low_stock
+            const inCart = st.cart.find((c) => c.product_id === p.id)
 
-              return `
-                <button
-                  type="button"
-                  class="pos-product-tile ${isOut ? 'tile-disabled' : ''} ${inCart ? 'tile-selected' : ''}"
-                  data-pos-add="${p.id}"
-                  ${isOut ? 'disabled' : ''}
-                >
-                  <div class="tile-top-row">
+            let stockBadge = `<span class="status-badge badge-success">${formatQty(avail, p.unit)}</span>`
+            if (isOut) {
+              stockBadge = `<span class="status-badge badge-danger">Agotado</span>`
+            } else if (isLow) {
+              stockBadge = `<span class="status-badge badge-warning">${formatQty(avail, p.unit)}</span>`
+            }
+
+            const imgSrc = p.image_url || buildAestheticFallbackSVG(p.name, p.sku)
+
+            return `
+              <button
+                type="button"
+                class="pos-product-tile ${isOut ? 'tile-disabled' : ''} ${inCart ? 'tile-selected' : ''}"
+                data-pos-add="${p.id}"
+                ${isOut ? 'disabled' : ''}
+              >
+                <div class="tile-top-row">
+                  ${
+                    ui.showThumbnails
+                      ? `
                     <div class="tile-thumb-wrap">
-                      ${
-                        p.image_url
-                          ? `<img src="${escapeHTML(p.image_url)}" alt="${escapeHTML(p.name)}" class="tile-thumb-img" loading="lazy" />`
-                          : `<div class="tile-thumb-fallback">${icon('products', 16)}</div>`
-                      }
+                      <img
+                        src="${escapeHTML(imgSrc)}"
+                        alt="${escapeHTML(p.name)}"
+                        class="tile-thumb-img"
+                        loading="lazy"
+                        onerror="window.handleProductImageError && window.handleProductImageError(this)"
+                      />
                     </div>
-                    <div class="tile-head-meta">
-                      <div class="tile-top">
-                        <span class="tile-sku">${escapeHTML(p.sku)}</span>
-                        ${stockBadge}
-                      </div>
-                      <div class="tile-name">${escapeHTML(p.name)}</div>
-                      <div class="tile-barcode-sub">${escapeHTML(p.category_name || '')} · EAN ${escapeHTML(p.barcode || '—')}</div>
+                  `
+                      : ''
+                  }
+                  <div class="tile-head-meta">
+                    <div class="tile-top">
+                      <span class="tile-sku">${escapeHTML(p.sku)}</span>
+                      ${stockBadge}
                     </div>
+                    <div class="tile-name">${escapeHTML(p.name)}</div>
+                    <div class="tile-barcode-sub">${escapeHTML(p.category_name || '')} · EAN ${escapeHTML(p.barcode || '—')}</div>
                   </div>
-                  <div class="tile-bottom">
-                    <div class="tile-price">
-                      <strong>${formatCOP(p.sale_price)}</strong>
-                      <small>/ ${escapeHTML(p.unit)}</small>
-                    </div>
-                    ${
-                      inCart
-                        ? `<span class="tile-cart-qty">${inCart.quantity} en ticket</span>`
-                        : p.next_lot_number
-                        ? `<span class="tile-lot-hint">Lote ${escapeHTML(p.next_lot_number)}</span>`
-                        : ''
-                    }
+                </div>
+                <div class="tile-bottom">
+                  <div class="tile-price">
+                    <strong>${formatCOP(p.sale_price)}</strong>
+                    <small>/ ${escapeHTML(p.unit)}</small>
                   </div>
-                </button>
-              `
-            })
-            .join('')}
+                  ${
+                    inCart
+                      ? `<span class="tile-cart-qty">${inCart.quantity} en ticket</span>`
+                      : p.next_lot_number
+                      ? `<span class="tile-lot-hint">Lote ${escapeHTML(p.next_lot_number)}</span>`
+                      : ''
+                  }
+                </div>
+              </button>
+            `
+          })
+          .join('')}
+      </div>
+      ${
+        remainingCount > 0
+          ? `
+        <div class="catalog-load-more">
+          <button type="button" class="btn btn-outline btn-sm" id="btn-pos-load-more">
+            Mostrar más productos (${remainingCount} restantes de ${allFiltered.length})
+          </button>
         </div>
-        ${
-          remainingCount > 0
-            ? `
-          <div class="catalog-load-more">
-            <button type="button" class="btn btn-outline btn-sm" id="btn-pos-load-more">
-              Mostrar más productos (${remainingCount} restantes de ${allFiltered.length})
-            </button>
-          </div>
-        `
-            : ''
-        }
       `
+          : ''
+      }
+    `
 
   const cartHTML =
     st.cart.length === 0
       ? `
         <div class="cart-empty-state">
-          <p>Sin artículos en la venta actual</p>
-          <small>Usa el lector de cámara o selecciona productos del catálogo de 400 referencias.</small>
+          <p>Sin artículos en el ticket actual</p>
+          <small>Toca un producto o usa el lector de cámara para agregarlo.</small>
         </div>
       `
       : st.cart
@@ -205,11 +254,40 @@ export function renderPOSViewHTML(st) {
           .join('')
 
   const tv = st.transferVerification
+  const show50vhDock = Boolean(ui.inlineMobileScanner)
 
   return `
     <div class="pos-layout">
-      <!-- Panel Izquierdo: Buscador, Escáner de Cámara y Catálogo de 400 Productos -->
+      <!-- Panel Izquierdo: Lector 50% de pantalla opcional + Buscador + Catálogo -->
       <section class="pos-catalog-panel" aria-label="Catálogo de productos disponibles">
+        ${
+          show50vhDock
+            ? `
+          <div id="pos-50vh-scanner-dock" class="pos-50vh-scanner-dock" aria-label="Lector de código de barras ocupando el 50% de la pantalla">
+            <div class="scanner-50vh-header">
+              <div class="scanner-50vh-title">
+                ${icon('barcode', 16)}
+                <span>Lector de Barras Activo (50% Pantalla)</span>
+              </div>
+              <button type="button" class="btn btn-ghost btn-xs" id="btn-close-50vh-scanner">
+                Cerrar Cámara
+              </button>
+            </div>
+            <div id="pos-50vh-reader-box" class="pos-50vh-reader-box"></div>
+            <form id="form-50vh-quick-scan" class="scanner-50vh-footer">
+              <input
+                id="input-50vh-barcode"
+                type="text"
+                placeholder="Escanea o escribe código EAN / SKU..."
+                value="${escapeHTML((st.products || [])[0]?.barcode || '')}"
+              />
+              <button type="submit" class="btn btn-primary btn-sm">Registrar</button>
+            </form>
+          </div>
+        `
+            : ''
+        }
+
         <header class="panel-toolbar">
           <div class="search-field-wrapper">
             ${icon('search', 16, 'search-icon')}
@@ -217,13 +295,27 @@ export function renderPOSViewHTML(st) {
               id="pos-search-input"
               type="search"
               value="${escapeHTML(st.posSearch)}"
-              placeholder="Buscar en 400 productos por nombre, SKU o código EAN..."
+              placeholder="Buscar producto por nombre, SKU o código de barras..."
               autocomplete="off"
             />
           </div>
 
           <div class="toolbar-actions">
-            <button type="button" class="btn btn-primary btn-sm" id="btn-pos-barcode-camera" title="Escanear código de barras con la cámara">
+            <button
+              type="button"
+              class="btn ${show50vhDock ? 'btn-primary' : 'btn-outline'} btn-sm"
+              id="btn-toggle-50vh-scanner"
+              title="Activar cámara lectora ocupando el 50% de la pantalla"
+            >
+              ${icon('camera', 15)}
+              <span>Cámara 50%</span>
+            </button>
+            <button
+              type="button"
+              class="btn btn-primary btn-sm"
+              id="btn-pos-barcode-camera"
+              title="Abrir modal de escáner de código de barras"
+            >
               ${icon('barcode', 15)}
               <span>Escanear Código</span>
             </button>
@@ -262,7 +354,7 @@ export function renderPOSViewHTML(st) {
         </div>
       </section>
 
-      <!-- Panel Derecho: Ticket, Verificador de Transferencias y Cobro -->
+      <!-- Panel Derecho: Ticket, Verificador de Transferencias y Botón Gigante para el Pulgar -->
       <aside class="pos-ticket-panel ${st.mobileTicketOpen ? 'mobile-drawer-open' : ''}" aria-label="Ticket de venta">
         <header class="ticket-header">
           <div>
@@ -378,11 +470,11 @@ export function renderPOSViewHTML(st) {
           <button
             type="button"
             id="btn-pos-submit"
-            class="btn btn-primary btn-block btn-lg"
+            class="btn btn-primary btn-block btn-thumb-giant"
             ${st.cart.length === 0 ? 'disabled' : ''}
           >
-            ${icon('check', 16)}
-            <span>Confirmar Venta (${formatCOP(total)}) [F2]</span>
+            ${icon('check', 18)}
+            <span>Cobrar Ahora (${formatCOP(total)}) [F2]</span>
           </button>
 
           ${
@@ -397,18 +489,6 @@ export function renderPOSViewHTML(st) {
           }
         </footer>
       </aside>
-
-      <!-- Barra Fija Mobile-First para el Tendero en Celular -->
-      <div class="mobile-pos-bottom-bar" id="mobile-pos-bar">
-        <button type="button" class="btn btn-outline btn-sm" id="btn-mobile-scan">
-          ${icon('barcode', 16)}
-          <span>Escanear</span>
-        </button>
-        <button type="button" class="btn btn-primary btn-mobile-ticket" id="btn-open-mobile-ticket">
-          ${icon('cart', 16)}
-          <span>Ticket (${itemsCount}) · ${formatCOP(total)}</span>
-        </button>
-      </div>
     </div>
   `
 }
@@ -457,17 +537,60 @@ export function bindPOSViewEvents(root, refreshCatalogAndContext) {
     }
   })
 
+  root.querySelector('#btn-empty-pos-create-first')?.addEventListener('click', () => {
+    openProductFormModal(null, refreshCatalogAndContext)
+  })
+
   root.querySelector('#btn-pos-barcode-camera')?.addEventListener('click', () => {
     openBarcodeScannerModal()
   })
 
-  root.querySelector('#btn-mobile-scan')?.addEventListener('click', () => {
-    openBarcodeScannerModal()
+  root.querySelector('#btn-toggle-50vh-scanner')?.addEventListener('click', async () => {
+    const cur = getUISettingsSync()
+    const next = !cur.inlineMobileScanner
+    if (!next) {
+      await stopInline50vhScanner()
+    }
+    saveUISettingsSync({ inlineMobileScanner: next })
+    setState({})
   })
 
-  root.querySelector('#btn-open-mobile-ticket')?.addEventListener('click', () => {
-    setState({ mobileTicketOpen: !getState().mobileTicketOpen })
+  root.querySelector('#btn-close-50vh-scanner')?.addEventListener('click', async () => {
+    await stopInline50vhScanner()
+    saveUISettingsSync({ inlineMobileScanner: false })
+    setState({})
   })
+
+  root.querySelector('#form-50vh-quick-scan')?.addEventListener('submit', (e) => {
+    e.preventDefault()
+    const code = root.querySelector('#input-50vh-barcode')?.value
+    handleScannedCode(code)
+  })
+
+  // Si el dock 50% de pantalla está activo, inicializar cámara en #pos-50vh-reader-box
+  const dockReader = root.querySelector('#pos-50vh-reader-box')
+  if (dockReader && typeof window.Html5Qrcode === 'function' && !inlineScannerRunning) {
+    try {
+      inlineHtml5Scanner = new window.Html5Qrcode('pos-50vh-reader-box')
+      inlineHtml5Scanner
+        .start(
+          { facingMode: 'environment' },
+          { fps: 10, qrbox: { width: 220, height: 110 } },
+          (decodedText) => {
+            handleScannedCode(decodedText)
+          },
+          () => {}
+        )
+        .then(() => {
+          inlineScannerRunning = true
+        })
+        .catch(() => {
+          dockReader.innerHTML = `<div class="scanner-fallback-msg">Visor 50vh activo (usa el campo inferior si tu equipo no tiene cámara conectada).</div>`
+        })
+    } catch {
+      dockReader.innerHTML = `<div class="scanner-fallback-msg">Visor 50vh activo.</div>`
+    }
+  }
 
   root.querySelector('#btn-close-mobile-ticket')?.addEventListener('click', () => {
     setState({ mobileTicketOpen: false })
@@ -605,7 +728,22 @@ export async function submitCurrentSale(refreshCatalogAndContext) {
   const st = getState()
   if (!st.cart.length || isSubmittingSale) return
 
+  const ui = getUISettingsSync()
   const { total } = calculateCartTotals(st.cart)
+
+  if (
+    ui.requireTransferPhoto &&
+    (st.paymentMethod === 'nequi' || st.paymentMethod === 'bancolombia') &&
+    !st.transferVerification
+  ) {
+    showToast(
+      'error',
+      'Debes capturar la foto de verificación de transferencia antes de confirmar la venta.'
+    )
+    openTransferVerifierModal(total)
+    return
+  }
+
   if (st.paymentMethod === 'efectivo' && st.amountReceived !== '') {
     const rec = Number(st.amountReceived)
     if (!Number.isFinite(rec) || rec < total) {

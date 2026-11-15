@@ -2,6 +2,7 @@ import { initTheme } from './core/theme.js'
 import { isOwner } from './core/permissions.js'
 import { initRouter, parseCurrentRoute, navigateTo } from './core/router.js'
 import { fetchAuthStatus } from './core/session.js'
+import { getPrivateReviewsLocal, getUISettingsSync } from './core/localStore.js'
 import {
   getState,
   setState,
@@ -17,7 +18,7 @@ import { fetchUsers } from './services/users.js'
 import { renderAppShell, bindKeyboardShortcuts } from './ui/shell.js'
 
 /**
- * Inicializador Principal de la Aplicación Kairo POS & Inventario.
+ * Inicializador Principal de TiendApp POS & Inventario en /app/.
  */
 
 export async function refreshAllData() {
@@ -25,14 +26,16 @@ export async function refreshAllData() {
   if (!st.user) return
 
   const owner = isOwner(st.user)
-  const [categories, products] = await Promise.all([
+  const [categories, products, reviews] = await Promise.all([
     fetchCategories(),
     fetchProducts(owner),
+    getPrivateReviewsLocal(),
   ])
 
   const patch = {
     categories,
     products,
+    reviews,
   }
 
   if (owner) {
@@ -86,6 +89,13 @@ function handleLogout() {
 
 async function bootstrap() {
   initTheme()
+  const ui = getUISettingsSync()
+  if (typeof document !== 'undefined') {
+    document.documentElement.setAttribute(
+      'data-density',
+      ui.compactDensity ? 'compact' : 'comfortable'
+    )
+  }
 
   const root = document.getElementById('app')
   subscribe(() => {
@@ -96,11 +106,6 @@ async function bootstrap() {
     })
   })
 
-  window.addEventListener('kairo:unauthorized', () => {
-    handleLogout()
-    showToast('error', 'Tu sesión ha expirado. Inicia sesión nuevamente.')
-  })
-
   initRouter(() => {
     refreshAllData().catch(() => {})
   })
@@ -108,24 +113,27 @@ async function bootstrap() {
 
   try {
     const status = await fetchAuthStatus()
+    const urlParams = new URLSearchParams(window.location.search)
+    const modeParam = urlParams.get('mode')
+
     setState(
       {
         booting: false,
         initialized: Boolean(status.initialized),
         storeProfile: status.store_profile || null,
-        user: status.user || null,
+        user: modeParam === 'login' ? null : status.user || null,
       },
       false
     )
 
-    if (status.user) {
+    if (status.user && modeParam !== 'login') {
       await handleAuthenticated(status.user)
     } else {
       setState({ booting: false }, true)
     }
   } catch (err) {
     setState({ booting: false }, true)
-    showToast('error', err.message || 'No se pudo conectar con el servidor.')
+    showToast('error', err.message || 'No se pudo inicializar el entorno local.')
   }
 }
 

@@ -6,238 +6,206 @@
     <meta name="color-scheme" content="dark light" />
     <meta
       name="description"
-      content="Kairo — Software de inventario y punto de venta (POS) Mobile-First para tiendas, abarrotes, víveres y papelerías en Colombia. Incluye 400 productos precargados en COP, lector de código de barras por cámara y verificador de pagos Nequi/Bancolombia."
+      content="TiendApp · Kairo — POS e Inventario minimalista de precisión."
     />
-    <title>Kairo — Sistema POS e Inventario para Comercios en Colombia</title>
+    <title>TiendApp — Control Total. Cero Fricción.</title>
     <link rel="icon" type="image/svg+xml" href="./assets/icons/favicon.svg" />
     <link rel="stylesheet" href="./css/theme.css" />
     <link rel="stylesheet" href="./css/base.css" />
     <link rel="stylesheet" href="./css/landing.css" />
   </head>
-  <body>
-    <header class="lp-navbar">
-      <div class="lp-container lp-nav-inner">
-        <a href="./" class="lp-brand" aria-label="Kairo Inicio">
-          <svg width="118" height="28" viewBox="0 0 132 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <body class="lp-body">
+    <!-- Fondo Interactivo 3D de Nodos / Partículas Conectadas (Estilo Vercel / Antigravity) -->
+    <canvas id="particle-network-canvas" class="lp-canvas-bg" aria-hidden="true"></canvas>
+
+    <div class="lp-viewport">
+      <!-- Barra Superior Minimalista -->
+      <header class="lp-topbar">
+        <a href="./" class="lp-brand" aria-label="TiendApp Inicio">
+          <svg width="136" height="30" viewBox="0 0 156 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
             <rect width="32" height="32" rx="6" fill="var(--brand-mark-bg)"/>
             <rect x="0.75" y="0.75" width="30.5" height="30.5" rx="5.25" stroke="var(--brand-mark-border)" stroke-width="1"/>
             <path d="M9 8V24M9 16L17.5 8M13.5 12L20.5 24" stroke="var(--brand-mark-fg)" stroke-width="2.2" stroke-linecap="square" stroke-linejoin="miter"/>
             <rect x="21.5" y="8" width="2.5" height="6" fill="var(--accent)"/>
-            <text x="41" y="21.5" fill="currentColor" font-family="var(--font-sans)" font-size="16" font-weight="700" letter-spacing="0.09em">KAIRO</text>
+            <text x="41" y="21.5" fill="currentColor" font-family="var(--font-sans)" font-size="15.5" font-weight="700" letter-spacing="0.08em">TIENDAPP</text>
           </svg>
         </a>
 
-        <nav class="lp-links" aria-label="Secciones de la página">
-          <a href="#arquitectura">Hardware y Cámara</a>
-          <a href="#catalogo-400">Catálogo 400 Productos</a>
-          <a href="#registro-tienda">Registrar Tienda</a>
-        </nav>
-
-        <div class="lp-actions">
+        <div class="lp-topbar-actions">
           <button
             type="button"
             id="lp-theme-toggle"
-            class="lp-icon-btn"
-            aria-label="Alternar modo claro u oscuro"
-            title="Cambiar tema visual"
+            class="lp-theme-btn"
+            aria-label="Alternar tema claro u oscuro"
+            title="Cambiar modo visual"
           ></button>
-          <a href="./app/" class="lp-btn lp-btn-outline" id="lp-go-app-btn">Entrar al Panel (/app)</a>
-          <a href="#registro-tienda" class="lp-btn lp-btn-primary">Crear Tienda</a>
+        </div>
+      </header>
+
+      <!-- Escenario Central con Abundante Espacio en Blanco (Whitespace) -->
+      <main class="lp-center-stage">
+        <div class="lp-hero-minimal">
+          <div class="lp-pill-badge">
+            <span class="lp-pulse-dot"></span>
+            <span>POS · Inventario FEFO · Cámara Nativa</span>
+          </div>
+
+          <h1 class="lp-mega-title">
+            Tu tienda.<br />
+            <span class="lp-title-accent">Sin fricción.</span>
+          </h1>
+
+          <p class="lp-short-sub">
+            Punto de venta e inventario por lotes con precisión quirúrgica en PC y celular.
+          </p>
+
+          <!-- Los 3 Botones Principales (Call to Actions) con Animaciones de Hover Suaves -->
+          <div class="lp-cta-cluster" role="group" aria-label="Acciones principales">
+            <button type="button" class="lp-cta-btn lp-cta-primary" id="btn-cta-register">
+              <span>¿Nuevo usuario? Registrarse</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </button>
+
+            <button type="button" class="lp-cta-btn lp-cta-secondary" id="btn-cta-login">
+              <span>¿Ya tienes cuenta? Iniciar Sesión</span>
+            </button>
+
+            <button type="button" class="lp-cta-btn lp-cta-ghost" id="btn-cta-faq">
+              <span>Dudas e Inquietudes</span>
+            </button>
+          </div>
+        </div>
+      </main>
+
+      <!-- Pie Minimalista de Tres Puntos Clave -->
+      <footer class="lp-minimal-footer">
+        <div class="lp-pillars-row">
+          <span><strong>01</strong> Tienda en blanco + Tutorial Guiado</span>
+          <span class="lp-dot-sep">·</span>
+          <span><strong>02</strong> Escáner Cámara 50% + Canvas Nequi</span>
+          <span class="lp-dot-sep">·</span>
+          <span><strong>03</strong> Arquitectura PC &amp; Móvil</span>
+        </div>
+      </footer>
+    </div>
+
+    <!-- Modal 1: ¿Nuevo usuario? Registrarse (Creación de Tienda en Blanco) -->
+    <div id="modal-register" class="lp-modal-backdrop" hidden>
+      <div class="lp-modal-card" role="dialog" aria-modal="true" aria-labelledby="reg-modal-title">
+        <div class="lp-modal-header">
+          <div>
+            <span class="lp-modal-tag">Onboarding · Cero Datos Falsos</span>
+            <h2 id="reg-modal-title">Crear Nueva Tienda</h2>
+          </div>
+          <button type="button" class="lp-modal-close" data-close-lp-modal aria-label="Cerrar">✕</button>
+        </div>
+
+        <form id="landing-onboarding-form" class="lp-form" autocomplete="off">
+          <div class="lp-form-row">
+            <div class="lp-field">
+              <label for="onb-store-name">Nombre del local *</label>
+              <input id="onb-store-name" name="store_name" type="text" required minlength="2" placeholder="Ej. Mercados El Vecino" />
+            </div>
+            <div class="lp-field">
+              <label for="onb-nit">NIT *</label>
+              <input id="onb-nit" name="nit" type="text" required minlength="5" placeholder="Ej. 901.482.310-4" />
+            </div>
+          </div>
+
+          <div class="lp-form-row">
+            <div class="lp-field">
+              <label for="onb-owner-name">Nombre del dueño *</label>
+              <input id="onb-owner-name" name="owner_name" type="text" required minlength="2" placeholder="Ej. Carlos Mendoza" />
+            </div>
+            <div class="lp-field">
+              <label for="onb-owner-doc">Documento de identidad *</label>
+              <input id="onb-owner-doc" name="owner_document" type="text" required minlength="5" placeholder="Ej. 1020784512" />
+            </div>
+          </div>
+
+          <div class="lp-form-row">
+            <div class="lp-field">
+              <label for="onb-address">Dirección *</label>
+              <input id="onb-address" name="address" type="text" required minlength="4" placeholder="Ej. Calle 45 # 18-22" />
+            </div>
+            <div class="lp-field">
+              <label for="onb-neighborhood">Barrio *</label>
+              <input id="onb-neighborhood" name="neighborhood" type="text" required minlength="2" placeholder="Ej. Chapinero" />
+            </div>
+          </div>
+
+          <div id="onb-error" class="lp-error" hidden></div>
+
+          <button type="submit" id="onb-submit-btn" class="lp-cta-btn lp-cta-primary lp-btn-full">
+            <span>Crear Tienda en Blanco e Iniciar Tutorial</span>
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Modal 2: ¿Ya tienes cuenta? Iniciar Sesión -->
+    <div id="modal-login" class="lp-modal-backdrop" hidden>
+      <div class="lp-modal-card lp-modal-narrow" role="dialog" aria-modal="true" aria-labelledby="login-modal-title">
+        <div class="lp-modal-header">
+          <div>
+            <span class="lp-modal-tag">Acceso Directo</span>
+            <h2 id="login-modal-title">Iniciar Sesión</h2>
+          </div>
+          <button type="button" class="lp-modal-close" data-close-lp-modal aria-label="Cerrar">✕</button>
+        </div>
+
+        <form id="landing-login-form" class="lp-form" autocomplete="on">
+          <div class="lp-field">
+            <label for="lp-login-user">Usuario</label>
+            <input id="lp-login-user" type="text" required placeholder="dueno o tendero" value="dueno" />
+          </div>
+          <div class="lp-field">
+            <label for="lp-login-pass">Contraseña</label>
+            <input id="lp-login-pass" type="password" required placeholder="••••••••" value="Password2026!" />
+          </div>
+
+          <div id="lp-login-error" class="lp-error" hidden></div>
+
+          <button type="submit" class="lp-cta-btn lp-cta-primary lp-btn-full">
+            <span>Ingresar a /app</span>
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Modal 3: Dudas e Inquietudes -->
+    <div id="modal-faq" class="lp-modal-backdrop" hidden>
+      <div class="lp-modal-card" role="dialog" aria-modal="true" aria-labelledby="faq-modal-title">
+        <div class="lp-modal-header">
+          <div>
+            <span class="lp-modal-tag">Centro de Respuestas Rápidas</span>
+            <h2 id="faq-modal-title">Dudas e Inquietudes</h2>
+          </div>
+          <button type="button" class="lp-modal-close" data-close-lp-modal aria-label="Cerrar">✕</button>
+        </div>
+
+        <div class="lp-faq-list">
+          <div class="lp-faq-item">
+            <strong>¿Mi tienda inicia con productos falsos?</strong>
+            <p>No. Al registrarte, tu tienda nace 100% en blanco y un tutorial interactivo de 3 pasos te guía para crear tu primer producto, venderlo y ver el descuento en Kardex.</p>
+          </div>
+          <div class="lp-faq-item">
+            <strong>¿Cómo funciona en PC vs Celular?</strong>
+            <p>En PC (Dueño) dispones de menú lateral y tablas completas de inventario. En Celular (Tendero) tienes barra inferior, lector de cámara al 50% de pantalla y botones gigantes para el pulgar.</p>
+          </div>
+          <div class="lp-faq-item">
+            <strong>¿Dónde se guardan mis datos y reseñas?</strong>
+            <p>Todo persiste localmente en IndexedDB y LocalStorage con velocidad instantánea, incluyendo el Muro de Reseñas privado exclusivo para usuarios logueados.</p>
+          </div>
+        </div>
+
+        <div class="lp-modal-footer">
+          <button type="button" class="lp-cta-btn lp-cta-primary lp-btn-full" id="btn-faq-to-register">
+            <span>Crear Mi Tienda Ahora</span>
+          </button>
         </div>
       </div>
-    </header>
-
-    <main>
-      <!-- Hero Principal + Onboarding Directo -->
-      <section class="lp-hero">
-        <div class="lp-container lp-hero-grid">
-          <div class="lp-hero-copy">
-            <span class="lp-eyebrow">POS Mobile-First · Inventario FEFO/FIFO · 100% Local-First</span>
-            <h1>Punto de venta e inventario diseñado para el comercio real en Colombia.</h1>
-            <p class="lp-lead">
-              Registra tu establecimiento en segundos, recibe una base precargada con
-              <strong>400 productos reales de abarrotes, víveres y papelería en COP</strong>,
-              escanea códigos de barras con la cámara de tu celular y respalda cada pago de
-              <strong>Nequi o Bancolombia</strong> con fotografía y sello de tiempo exacto.
-            </p>
-
-            <div class="lp-hero-cta-row">
-              <a href="#registro-tienda" class="lp-btn lp-btn-primary lp-btn-lg">
-                Comenzar Registro de Tienda
-              </a>
-              <a href="./app/" class="lp-btn lp-btn-outline lp-btn-lg">
-                Ir a la Aplicación (/app)
-              </a>
-            </div>
-
-            <div class="lp-specs-strip">
-              <div class="lp-spec-item">
-                <strong>400 Productos</strong>
-                <span>Abarrotes, Víveres y Papelería en COP</span>
-              </div>
-              <div class="lp-spec-item">
-                <strong>Escáner Cámara</strong>
-                <span>Lectura EAN-13 vía html5-qrcode</span>
-              </div>
-              <div class="lp-spec-item">
-                <strong>Verificador Nequi/Banco</strong>
-                <span>Captura en &lt;canvas&gt; + Timestamp</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Formulario de Onboarding (Creación de Tienda) -->
-          <div id="registro-tienda" class="lp-onboarding-card">
-            <div class="lp-card-head">
-              <span class="lp-tag">Onboarding · Creación de Tienda</span>
-              <h2>Registra tu Establecimiento</h2>
-              <p>Al completar el registro serás redirigido automáticamente a <code>/app</code> con los 400 productos listos para vender.</p>
-            </div>
-
-            <form id="landing-onboarding-form" class="lp-form" autocomplete="off">
-              <div class="lp-form-row">
-                <div class="lp-field">
-                  <label for="onb-store-name">Nombre del local *</label>
-                  <input
-                    id="onb-store-name"
-                    name="store_name"
-                    type="text"
-                    required
-                    minlength="2"
-                    placeholder="Ej. Autoservicio y Papelería Central"
-                  />
-                </div>
-                <div class="lp-field">
-                  <label for="onb-nit">NIT *</label>
-                  <input
-                    id="onb-nit"
-                    name="nit"
-                    type="text"
-                    required
-                    minlength="5"
-                    placeholder="Ej. 901.482.310-4"
-                  />
-                </div>
-              </div>
-
-              <div class="lp-form-row">
-                <div class="lp-field">
-                  <label for="onb-owner-name">Nombre del dueño *</label>
-                  <input
-                    id="onb-owner-name"
-                    name="owner_name"
-                    type="text"
-                    required
-                    minlength="2"
-                    placeholder="Ej. Carlos Mendoza"
-                  />
-                </div>
-                <div class="lp-field">
-                  <label for="onb-owner-doc">Documento de identidad *</label>
-                  <input
-                    id="onb-owner-doc"
-                    name="owner_document"
-                    type="text"
-                    required
-                    minlength="5"
-                    placeholder="Ej. 1020784512"
-                  />
-                </div>
-              </div>
-
-              <div class="lp-form-row">
-                <div class="lp-field">
-                  <label for="onb-address">Dirección *</label>
-                  <input
-                    id="onb-address"
-                    name="address"
-                    type="text"
-                    required
-                    minlength="4"
-                    placeholder="Ej. Calle 45 # 18-22"
-                  />
-                </div>
-                <div class="lp-field">
-                  <label for="onb-neighborhood">Barrio *</label>
-                  <input
-                    id="onb-neighborhood"
-                    name="neighborhood"
-                    type="text"
-                    required
-                    minlength="2"
-                    placeholder="Ej. Chapinero Central"
-                  />
-                </div>
-              </div>
-
-              <div id="onb-error" class="lp-error" hidden></div>
-
-              <button type="submit" id="onb-submit-btn" class="lp-btn lp-btn-primary lp-btn-block">
-                Registrar Tienda e Ingresar al POS (/app)
-              </button>
-            </form>
-          </div>
-        </div>
-      </section>
-
-      <!-- Sección de Integración de Hardware y Valor Agregado -->
-      <section id="arquitectura" class="lp-section">
-        <div class="lp-container">
-          <div class="lp-section-header">
-            <span class="lp-eyebrow">Integración de Hardware y Control Operativo</span>
-            <h2>Diseñado para operar desde el celular del tendero y el panel del dueño</h2>
-          </div>
-
-          <div class="lp-features-grid">
-            <article class="lp-feature-card">
-              <div class="lp-feature-num">01</div>
-              <h3>Lector de Código de Barras por Cámara</h3>
-              <p>
-                Integración nativa con <code>html5-qrcode</code> vía CDN. El tendero apunta la cámara trasera del celular al código EAN-13 del producto y este se agrega automáticamente al carrito del POS.
-              </p>
-            </article>
-
-            <article class="lp-feature-card">
-              <div class="lp-feature-num">02</div>
-              <h3>Verificador de Transferencias (Nequi / Bancolombia)</h3>
-              <p>
-                Módulo de captura fotográfica que abre la cámara trasera, congela el frame de video en un elemento <code>&lt;canvas&gt;</code>, estampa la fecha y hora exacta (timestamp) y guarda la evidencia en el registro de la venta.
-              </p>
-            </article>
-
-            <article class="lp-feature-card">
-              <div class="lp-feature-num">03</div>
-              <h3>Métricas Rápidas y Control de Lotes FEFO/FIFO</h3>
-              <p>
-                El Dueño visualiza en tiempo real las Ventas del Día, el Producto Más Vendido y las Alertas de Bajo Stock, mientras el motor descuenta existencias del lote próximo a vencer.
-              </p>
-            </article>
-          </div>
-        </div>
-      </section>
-
-      <!-- Vista Previa del Catálogo Semilla de 400 Productos -->
-      <section id="catalogo-400" class="lp-section lp-section-alt">
-        <div class="lp-container">
-          <div class="lp-section-header">
-            <span class="lp-eyebrow">Base de Datos Realista en COP (db.js / data.json)</span>
-            <h2>400 Productos Reales Listos desde el Primer Segundo</h2>
-            <p>
-              Mix equilibrado de Abarrotes (160), Víveres (140) y Papelería (100) con códigos EAN-13 colombianos, precios reales en Pesos Colombianos (COP) e imágenes dinámicas por categoría.
-            </p>
-          </div>
-
-          <div id="lp-sample-products" class="lp-sample-grid" aria-label="Muestra de productos incluidos"></div>
-        </div>
-      </section>
-    </main>
-
-    <footer class="lp-footer">
-      <div class="lp-container lp-footer-inner">
-        <span>Kairo POS &amp; Inventario · Arquitectura Vanilla JS ES6+, HTML5, CSS3 e IndexedDB.</span>
-        <a href="./app/">Ir al Panel Operativo (/app) →</a>
-      </div>
-    </footer>
+    </div>
 
     <script type="module" src="./js/landing.js"></script>
   </body>

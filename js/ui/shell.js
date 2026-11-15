@@ -2,12 +2,22 @@ import { isOwner } from '../core/permissions.js'
 import { getTheme, toggleTheme } from '../core/theme.js'
 import { navigateTo } from '../core/router.js'
 import { logoutSession } from '../core/session.js'
-import { getState, setState } from '../state.js'
-import { computeOwnerQuickMetrics, getStoredProfileSync } from '../core/localStore.js'
+import { getState, setState, calculateCartTotals } from '../state.js'
+import {
+  computeOwnerQuickMetrics,
+  getStoredProfileSync,
+  getUISettingsSync,
+  saveUISettingsSync,
+} from '../core/localStore.js'
 import { formatCOP } from '../utils/money.js'
 import { BRAND_LOGO_SVG, icon } from './icons.js'
 import { renderAuthScreen } from './login.js'
-import { renderPOSViewHTML, bindPOSViewEvents, submitCurrentSale } from './pos.js'
+import {
+  renderPOSViewHTML,
+  bindPOSViewEvents,
+  submitCurrentSale,
+  stopInline50vhScanner,
+} from './pos.js'
 import {
   renderProductsViewHTML,
   bindProductsViewEvents,
@@ -20,6 +30,9 @@ import {
   renderUsersViewHTML,
   bindUsersViewEvents,
 } from './lots.js'
+import { renderReviewsViewHTML, bindReviewsViewEvents } from './reviews.js'
+import { renderSettingsViewHTML, bindSettingsViewEvents } from './settings.js'
+import { renderInteractiveTourHTML, bindInteractiveTourEvents } from './tour.js'
 
 const OWNER_NAV_ITEMS = [
   { id: 'pos', label: 'Punto de Venta', iconName: 'pos' },
@@ -27,7 +40,14 @@ const OWNER_NAV_ITEMS = [
   { id: 'lots', label: 'Lotes (FEFO)', iconName: 'lots' },
   { id: 'inventory', label: 'Inventario / Kardex', iconName: 'inventory' },
   { id: 'sales', label: 'Ventas', iconName: 'sales' },
+  { id: 'reviews', label: 'Muro de Reseñas', iconName: 'star' },
   { id: 'users', label: 'Usuarios', iconName: 'users' },
+  { id: 'settings', label: 'Ajustes', iconName: 'settings' },
+]
+
+const TENDERO_NAV_ITEMS = [
+  { id: 'pos', label: 'Terminal POS', iconName: 'pos' },
+  { id: 'reviews', label: 'Muro de Reseñas', iconName: 'star' },
 ]
 
 function escapeHTML(str) {
@@ -38,12 +58,6 @@ function escapeHTML(str) {
     .replace(/"/g, '&quot;')
 }
 
-/**
- * Renderiza el Panel de "Métricas Rápidas" exclusivo para la vista del Dueño:
- * 1. Ventas del Día (COP + número de transacciones + transferencias verificadas)
- * 2. Producto Más Vendido (nombre, SKU y unidades vendidas)
- * 3. Alerta de Bajo Stock (cantidad de productos en bajo stock con acceso directo)
- */
 function renderOwnerQuickMetricsStrip(st) {
   if (!isOwner(st.user)) return ''
   const metrics = computeOwnerQuickMetrics(st.products || [], st.sales || [])
@@ -115,7 +129,7 @@ export function renderAppShell(root, { onAuthenticated, onLogout, refreshAll }) 
     root.innerHTML = `
       <div class="boot-screen">
         <div class="boot-brand">${BRAND_LOGO_SVG}</div>
-        <span class="boot-status">Cargando catálogo de 400 productos e IndexedDB...</span>
+        <span class="boot-status">Inicializando TiendApp...</span>
       </div>
     `
     return
@@ -128,143 +142,297 @@ export function renderAppShell(root, { onAuthenticated, onLogout, refreshAll }) 
 
   const owner = isOwner(st.user)
   const theme = getTheme()
-  const activeRoute = owner ? st.route || 'pos' : 'pos'
+  const activeRoute = st.route || 'pos'
   const store = st.storeProfile || getStoredProfileSync()
+  const ui = getUISettingsSync()
+  const { total, itemsCount } = calculateCartTotals(st.cart)
 
   let viewContentHTML = ''
-  if (!owner || activeRoute === 'pos') {
+  if (activeRoute === 'pos') {
     viewContentHTML = renderPOSViewHTML(st)
-  } else if (activeRoute === 'products') {
+  } else if (activeRoute === 'reviews') {
+    viewContentHTML = renderReviewsViewHTML(st)
+  } else if (owner && activeRoute === 'products') {
     viewContentHTML = renderProductsViewHTML(st)
-  } else if (activeRoute === 'lots') {
+  } else if (owner && activeRoute === 'lots') {
     viewContentHTML = renderLotsViewHTML(st)
-  } else if (activeRoute === 'inventory') {
+  } else if (owner && activeRoute === 'inventory') {
     viewContentHTML = renderInventoryViewHTML(st)
-  } else if (activeRoute === 'sales') {
+  } else if (owner && activeRoute === 'sales') {
     viewContentHTML = renderSalesViewHTML(st)
-  } else if (activeRoute === 'users') {
+  } else if (owner && activeRoute === 'users') {
     viewContentHTML = renderUsersViewHTML(st)
+  } else if (owner && activeRoute === 'settings') {
+    viewContentHTML = renderSettingsViewHTML(st)
   } else {
     viewContentHTML = renderPOSViewHTML(st)
   }
 
-  const navHTML = owner
-    ? `
-      <nav class="app-nav" aria-label="Módulos del sistema">
-        ${OWNER_NAV_ITEMS.map(
-          (item) => `
-            <button
-              type="button"
-              class="nav-item ${activeRoute === item.id ? 'active' : ''}"
-              data-nav-route="${item.id}"
-            >
-              ${icon(item.iconName, 15)}
-              <span>${item.label}</span>
-            </button>
-          `
-        ).join('')}
-      </nav>
-    `
-    : `
-      <div class="tendero-workspace-indicator">
-        ${icon('pos', 15)}
-        <span>POS · ${escapeHTML(store?.store_name || 'Caja Activa')}</span>
-      </div>
-    `
+  const navItems = owner ? OWNER_NAV_ITEMS : TENDERO_NAV_ITEMS
 
   root.innerHTML = `
-    <div class="app-frame">
-      <header class="app-header">
-        <div class="header-left">
-          <a href="#/pos" class="header-brand" aria-label="Kairo POS">
+    <div class="app-frame ${owner ? 'layout-owner-pc' : 'layout-tendero-mobile'}">
+      <!-- Menú Lateral (Sidebar) para Versión PC (Dueño) -->
+      <aside class="app-sidebar" aria-label="Menú lateral de navegación">
+        <div class="sidebar-top">
+          <a href="#/pos" class="sidebar-brand" aria-label="TiendApp Inicio">
             ${BRAND_LOGO_SVG}
           </a>
-          ${navHTML}
+          <div class="sidebar-store-chip">
+            <strong>${escapeHTML(store?.store_name || 'Mi Tienda')}</strong>
+            <span>NIT ${escapeHTML(store?.nit || '—')}</span>
+          </div>
         </div>
 
-        <div class="header-right">
-          <button
-            type="button"
-            class="btn-icon"
-            id="btn-header-theme"
-            title="${theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}"
-            aria-label="Cambiar tema de color"
-          >
-            ${theme === 'dark' ? icon('sun', 16) : icon('moon', 16)}
-          </button>
+        <nav class="sidebar-nav" aria-label="Módulos principales">
+          ${navItems
+            .map(
+              (item) => `
+              <button
+                type="button"
+                class="sidebar-nav-item nav-item ${activeRoute === item.id ? 'active' : ''}"
+                data-nav-route="${item.id}"
+              >
+                ${icon(item.iconName, 16)}
+                <span>${item.label}</span>
+              </button>
+            `
+            )
+            .join('')}
+        </nav>
 
-          <div class="user-pill">
+        <div class="sidebar-footer">
+          <div class="user-pill sidebar-user-pill">
             <span class="user-role-dot ${owner ? 'dot-owner' : 'dot-tendero'}"></span>
-            <span class="user-name">${escapeHTML(st.user.full_name)}</span>
-            <span class="user-role-tag">${escapeHTML(st.user.role_name)}</span>
+            <div class="sidebar-user-info">
+              <span class="user-name">${escapeHTML(st.user.full_name)}</span>
+              <span class="user-role-tag">${escapeHTML(st.user.role_name)}</span>
+            </div>
           </div>
 
-          <button type="button" class="btn btn-ghost btn-sm" id="btn-header-logout" title="Cambiar usuario o salir">
-            ${icon('logout', 15)}
-            <span class="hide-on-xs">Salir</span>
-          </button>
+          <div class="sidebar-footer-actions">
+            <button
+              type="button"
+              class="btn-icon"
+              id="btn-sidebar-theme"
+              title="Cambiar modo claro / oscuro"
+              aria-label="Cambiar tema"
+            >
+              ${theme === 'dark' ? icon('sun', 16) : icon('moon', 16)}
+            </button>
+            <button type="button" class="btn btn-ghost btn-sm" id="btn-sidebar-logout" title="Cerrar sesión">
+              ${icon('logout', 15)}
+              <span>Salir</span>
+            </button>
+          </div>
         </div>
-      </header>
+      </aside>
 
-      ${owner ? renderOwnerQuickMetricsStrip(st) : ''}
+      <!-- Columna Principal de Contenido -->
+      <div class="app-content-column">
+        <!-- Cabecera Compacta Superior -->
+        <header class="app-header">
+          <div class="header-left">
+            <a href="#/pos" class="header-brand mobile-only-brand" aria-label="TiendApp">
+              ${BRAND_LOGO_SVG}
+            </a>
+            <nav class="app-nav" aria-label="Navegación rápida">
+              ${navItems
+                .map(
+                  (item) => `
+                  <button
+                    type="button"
+                    class="nav-item ${activeRoute === item.id ? 'active' : ''}"
+                    data-nav-route="${item.id}"
+                  >
+                    ${icon(item.iconName, 15)}
+                    <span>${item.label}</span>
+                  </button>
+                `
+                )
+                .join('')}
+            </nav>
+          </div>
 
-      ${
-        st.toast
-          ? `
-        <div class="toast-notification toast-${st.toast.type}" role="status">
-          <span>${escapeHTML(st.toast.message)}</span>
-          <button type="button" class="btn-icon btn-icon-subtle" id="btn-close-toast" aria-label="Cerrar notificación">
-            ${icon('close', 14)}
+          <div class="header-right">
+            <button
+              type="button"
+              class="btn-icon"
+              id="btn-header-theme"
+              title="${theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}"
+              aria-label="Cambiar tema de color"
+            >
+              ${theme === 'dark' ? icon('sun', 16) : icon('moon', 16)}
+            </button>
+
+            <div class="user-pill">
+              <span class="user-role-dot ${owner ? 'dot-owner' : 'dot-tendero'}"></span>
+              <span class="user-name">${escapeHTML(st.user.full_name)}</span>
+              <span class="user-role-tag">${escapeHTML(st.user.role_name)}</span>
+            </div>
+
+            <button type="button" class="btn btn-ghost btn-sm" id="btn-header-logout" title="Cambiar usuario o salir">
+              ${icon('logout', 15)}
+              <span class="hide-on-xs">Salir</span>
+            </button>
+          </div>
+        </header>
+
+        ${owner ? renderInteractiveTourHTML(st) : ''}
+        ${owner ? renderOwnerQuickMetricsStrip(st) : ''}
+
+        ${
+          st.toast
+            ? `
+          <div class="toast-notification toast-${st.toast.type}" role="status">
+            <span>${escapeHTML(st.toast.message)}</span>
+            <button type="button" class="btn-icon btn-icon-subtle" id="btn-close-toast" aria-label="Cerrar notificación">
+              ${icon('close', 14)}
+            </button>
+          </div>
+        `
+            : ''
+        }
+
+        <main class="app-main">
+          ${viewContentHTML}
+        </main>
+      </div>
+
+      <!-- Barra de Navegación Inferior (Bottom Navigation Bar) para Versión Celular (Tendero/POS) -->
+      <nav class="app-bottom-nav" aria-label="Navegación móvil para el pulgar">
+        <button
+          type="button"
+          class="bottom-nav-btn ${activeRoute === 'pos' && !st.mobileTicketOpen ? 'active' : ''}"
+          data-nav-route="pos"
+        >
+          ${icon('pos', 18)}
+          <span>Caja POS</span>
+        </button>
+
+        <button
+          type="button"
+          class="bottom-nav-btn ${ui.inlineMobileScanner ? 'active' : ''}"
+          id="btn-bottom-cam50"
+        >
+          ${icon('barcode', 18)}
+          <span>Cámara 50%</span>
+        </button>
+
+        <button
+          type="button"
+          class="bottom-nav-thumb-pay ${itemsCount > 0 ? 'has-items' : ''}"
+          id="btn-open-mobile-ticket"
+        >
+          ${icon('cart', 18)}
+          <span>Cobrar (${itemsCount}) · ${formatCOP(total)}</span>
+        </button>
+
+        <button
+          type="button"
+          class="bottom-nav-btn ${activeRoute === 'reviews' ? 'active' : ''}"
+          data-nav-route="reviews"
+        >
+          ${icon('star', 18)}
+          <span>Reseñas</span>
+        </button>
+
+        ${
+          owner
+            ? `
+          <button
+            type="button"
+            class="bottom-nav-btn ${activeRoute === 'settings' ? 'active' : ''}"
+            data-nav-route="settings"
+          >
+            ${icon('settings', 18)}
+            <span>Ajustes</span>
           </button>
-        </div>
-      `
-          : ''
-      }
-
-      <main class="app-main">
-        ${viewContentHTML}
-      </main>
+        `
+            : `
+          <button type="button" class="bottom-nav-btn" id="btn-bottom-logout">
+            ${icon('logout', 18)}
+            <span>Salir</span>
+          </button>
+        `
+        }
+      </nav>
     </div>
   `
 
   root.querySelectorAll('[data-nav-route]').forEach((btn) => {
     btn.addEventListener('click', () => {
+      setState({ mobileTicketOpen: false }, false)
       navigateTo(btn.getAttribute('data-nav-route'))
     })
+  })
+
+  root.querySelector('#btn-bottom-cam50')?.addEventListener('click', async () => {
+    const cur = getUISettingsSync()
+    const next = !cur.inlineMobileScanner
+    if (!next) await stopInline50vhScanner()
+    saveUISettingsSync({ inlineMobileScanner: next })
+    if (st.route !== 'pos') navigateTo('pos')
+    else setState({ mobileTicketOpen: false })
+  })
+
+  root.querySelector('#btn-open-mobile-ticket')?.addEventListener('click', () => {
+    if (st.route !== 'pos') {
+      navigateTo('pos')
+      setState({ mobileTicketOpen: true })
+    } else {
+      setState({ mobileTicketOpen: !st.mobileTicketOpen })
+    }
   })
 
   root.querySelector('#btn-kpi-go-lowstock')?.addEventListener('click', () => {
     navigateTo('inventory')
   })
 
-  root.querySelector('#btn-header-theme')?.addEventListener('click', () => {
+  const handleToggleTheme = () => {
     toggleTheme()
     renderAppShell(root, { onAuthenticated, onLogout, refreshAll })
-  })
+  }
+  root.querySelector('#btn-header-theme')?.addEventListener('click', handleToggleTheme)
+  root.querySelector('#btn-sidebar-theme')?.addEventListener('click', handleToggleTheme)
 
-  root.querySelector('#btn-header-logout')?.addEventListener('click', async () => {
+  const handleDoLogout = async () => {
+    await stopInline50vhScanner()
     await logoutSession()
     if (typeof onLogout === 'function') {
       onLogout()
     }
-  })
+  }
+  root.querySelector('#btn-header-logout')?.addEventListener('click', handleDoLogout)
+  root.querySelector('#btn-sidebar-logout')?.addEventListener('click', handleDoLogout)
+  root.querySelector('#btn-bottom-logout')?.addEventListener('click', handleDoLogout)
 
   root.querySelector('#btn-close-toast')?.addEventListener('click', () => {
     setState({ toast: null })
   })
 
-  if (!owner || activeRoute === 'pos') {
+  if (owner) {
+    bindInteractiveTourEvents(root, refreshAll)
+  }
+
+  if (activeRoute === 'pos') {
     bindPOSViewEvents(root, refreshAll)
-  } else if (activeRoute === 'products') {
+  } else if (activeRoute === 'reviews') {
+    bindReviewsViewEvents(root)
+  } else if (owner && activeRoute === 'products') {
     bindProductsViewEvents(root, refreshAll)
-  } else if (activeRoute === 'lots') {
+  } else if (owner && activeRoute === 'lots') {
     bindLotsViewEvents(root, refreshAll)
-  } else if (activeRoute === 'inventory') {
+  } else if (owner && activeRoute === 'inventory') {
     bindInventoryViewEvents(root, refreshAll)
-  } else if (activeRoute === 'sales') {
+  } else if (owner && activeRoute === 'sales') {
     bindSalesViewEvents(root)
-  } else if (activeRoute === 'users') {
+  } else if (owner && activeRoute === 'users') {
     bindUsersViewEvents(root, refreshAll)
+  } else if (owner && activeRoute === 'settings') {
+    bindSettingsViewEvents(root, refreshAll)
+  } else {
+    bindPOSViewEvents(root, refreshAll)
   }
 }
 

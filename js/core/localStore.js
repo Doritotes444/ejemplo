@@ -1,29 +1,76 @@
 /**
  * js/core/localStore.js — Motor de Persistencia Local (IndexedDB + LocalStorage)
- * Gestiona Onboarding de Tienda (NIT, Dueño, Documento, Local, Dirección, Barrio),
- * Semilla de 400 productos reales (Abarrotes, Víveres y Papelería), Lotes FEFO/FIFO,
- * Ventas con evidencia fotográfica de transferencia (<canvas> + timestamp) y Métricas Rápidas.
+ * - Onboarding de Tienda EN BLANCO (Cero productos falsos obligatorios al registrarse)
+ * - Estado del Tutorial Interactivo Paso a Paso (1. Crear producto -> 2. Venta de prueba -> 3. Ver descuento de stock)
+ * - Panel de Ajustes con Toggles persistentes
+ * - Muro de Reseñas Privado (almacenado en IndexedDB, exclusivo para usuarios logueados en /app)
+ * - Lotes FEFO/FIFO, Kardex y Ventas con evidencia en <canvas>
  */
 
 import { SEED_CATEGORIES, SEED_PRODUCTS } from '../data/db.js'
 
-const IDB_NAME = 'kairo_pos_idb_v3'
+const IDB_NAME = 'kairo_pos_idb_v4'
 const IDB_VERSION = 1
 
 export const LS_KEYS = {
-  STORE_PROFILE: 'kairo_store_profile_v3',
-  ACTIVE_SESSION: 'kairo_active_session_v3',
-  FAKESTORE_CACHE: 'kairo_fakestore_imgs_v3',
+  STORE_PROFILE: 'tiendapp_store_profile_v4',
+  ACTIVE_SESSION: 'tiendapp_active_session_v4',
+  UI_SETTINGS: 'tiendapp_ui_settings_v4',
+  TOUR_STATE: 'tiendapp_tour_state_v4',
+}
+
+const DEFAULT_UI_SETTINGS = {
+  scannerSound: true,
+  showThumbnails: true,
+  requireTransferPhoto: false,
+  compactDensity: false,
+  inlineMobileScanner: false,
 }
 
 let dbPromise = null
 
-function getTodayISO() {
+export function getTodayISO() {
   const d = new Date()
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
+}
+
+/**
+ * Genera una miniatura SVG estética en Data URI como fallback infalible (onerror)
+ * para que jamás se muestre un ícono de imagen rota.
+ */
+export function buildAestheticFallbackSVG(name = 'Producto', sku = 'POS') {
+  const initials = String(name || 'PR')
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0] || '')
+    .join('')
+    .toUpperCase() || 'PR'
+  const cleanSku = String(sku || 'ITEM').slice(0, 10).toUpperCase()
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160">
+    <defs>
+      <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="#141b26"/>
+        <stop offset="100%" stop-color="#1e293b"/>
+      </linearGradient>
+    </defs>
+    <rect width="160" height="160" rx="14" fill="url(#g)"/>
+    <circle cx="80" cy="66" r="28" fill="rgba(59,130,246,0.14)" stroke="rgba(59,130,246,0.4)" stroke-width="1.5"/>
+    <text x="80" y="74" text-anchor="middle" fill="#60a5fa" font-family="system-ui,sans-serif" font-size="22" font-weight="700">${initials.replace(/[<>&"']/g, '')}</text>
+    <text x="80" y="124" text-anchor="middle" fill="#94a3b8" font-family="monospace" font-size="12" font-weight="600">${cleanSku.replace(/[<>&"']/g, '')}</text>
+  </svg>`
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`
+}
+
+if (typeof window !== 'undefined') {
+  window.handleProductImageError = function (imgEl, name, sku) {
+    if (!imgEl || imgEl.dataset.fallbackApplied === '1') return
+    imgEl.dataset.fallbackApplied = '1'
+    imgEl.src = buildAestheticFallbackSVG(name || imgEl.alt || 'Producto', sku || 'ITEM')
+  }
 }
 
 export function openLocalDB() {
@@ -42,6 +89,7 @@ export function openLocalDB() {
         'lots',
         'sales',
         'movements',
+        'reviews',
       ]
       for (const name of stores) {
         if (!db.objectStoreNames.contains(name)) {
@@ -79,38 +127,17 @@ async function putInStore(storeName, record) {
   })
 }
 
-/**
- * Conecta opcionalmente con FakeStore API para obtener imágenes remotas reales
- * complementarias al generador dinámico por categoría (Picsum).
- */
-export async function fetchPublicApiImages() {
-  try {
-    const cached = localStorage.getItem(LS_KEYS.FAKESTORE_CACHE)
-    if (cached) {
-      const parsed = JSON.parse(cached)
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed
-    }
-    const ctrl = new AbortController()
-    const timer = setTimeout(() => ctrl.abort(), 2500)
-    const res = await fetch('https://fakestoreapi.com/products?limit=20', {
-      signal: ctrl.signal,
-    })
-    clearTimeout(timer)
-    if (!res.ok) return []
-    const data = await res.json()
-    const urls = data.map((item) => item.image).filter(Boolean)
-    if (urls.length > 0) {
-      localStorage.setItem(LS_KEYS.FAKESTORE_CACHE, JSON.stringify(urls))
-    }
-    return urls
-  } catch {
-    return []
-  }
+async function clearObjectStore(storeName) {
+  const db = await openLocalDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readwrite')
+    const store = tx.objectStore(storeName)
+    const req = store.clear()
+    req.onsuccess = () => resolve()
+    req.onerror = () => reject(req.error)
+  })
 }
 
-/**
- * Verifica si la tienda ya fue registrada en LocalStorage / IndexedDB
- */
 export function getStoredProfileSync() {
   try {
     const raw = localStorage.getItem(LS_KEYS.STORE_PROFILE)
@@ -138,32 +165,109 @@ export function setActiveSessionSync(user) {
 }
 
 /**
- * Siembra los 400 productos reales y sus lotes iniciales en IndexedDB si aún no existen
+ * Gestión de Ajustes de Interfaz (Toggles)
  */
-export async function ensureSeed400Products() {
-  const existingProducts = await getAllFromStore('products')
-  if (existingProducts.length >= 400) {
-    return existingProducts.length
+export function getUISettingsSync() {
+  try {
+    const raw = localStorage.getItem(LS_KEYS.UI_SETTINGS)
+    return raw ? { ...DEFAULT_UI_SETTINGS, ...JSON.parse(raw) } : { ...DEFAULT_UI_SETTINGS }
+  } catch {
+    return { ...DEFAULT_UI_SETTINGS }
+  }
+}
+
+export function saveUISettingsSync(patch) {
+  const next = { ...getUISettingsSync(), ...patch }
+  localStorage.setItem(LS_KEYS.UI_SETTINGS, JSON.stringify(next))
+  if (typeof document !== 'undefined') {
+    document.documentElement.setAttribute(
+      'data-density',
+      next.compactDensity ? 'compact' : 'comfortable'
+    )
+  }
+  return next
+}
+
+/**
+ * Gestión del Tutorial Interactivo Paso a Paso (Tour)
+ * Pasos:
+ * 1 -> Crear su primer producto
+ * 2 -> Hacer una venta de prueba en el POS
+ * 3 -> Ver cómo se descontó el stock en Inventario/Kardex
+ * 4 -> Completado
+ */
+export function getTourStateSync() {
+  try {
+    const raw = localStorage.getItem(LS_KEYS.TOUR_STATE)
+    if (raw) return JSON.parse(raw)
+  } catch {
+    // ignore
+  }
+  return {
+    active: true,
+    step: 1,
+    completed: false,
+  }
+}
+
+export function saveTourStateSync(patch) {
+  const current = getTourStateSync()
+  const next = { ...current, ...patch }
+  localStorage.setItem(LS_KEYS.TOUR_STATE, JSON.stringify(next))
+  return next
+}
+
+export function syncTourProgress(productsCount, salesCount) {
+  const cur = getTourStateSync()
+  if (cur.completed || !cur.active) return cur
+
+  let nextStep = cur.step
+  if (productsCount === 0) {
+    nextStep = 1
+  } else if (productsCount >= 1 && salesCount === 0 && cur.step < 2) {
+    nextStep = 2
+  } else if (productsCount >= 1 && salesCount >= 1 && cur.step < 3) {
+    nextStep = 3
   }
 
+  if (nextStep !== cur.step) {
+    return saveTourStateSync({ step: nextStep })
+  }
+  return cur
+}
+
+/**
+ * Asegura únicamente las categorías base (sin agregar productos falsos automáticamente)
+ */
+export async function ensureBaseCategories() {
+  const existingCats = await getAllFromStore('categories')
+  if (existingCats.length > 0) return existingCats
+
+  const nowISO = new Date().toISOString()
+  for (const cat of SEED_CATEGORIES) {
+    await putInStore('categories', {
+      id: String(cat.id),
+      name: cat.name,
+      description: cat.description || '',
+      created_at: nowISO,
+    })
+  }
+  return getAllFromStore('categories')
+}
+
+/**
+ * Opción manual (solo bajo petición explícita en Ajustes) para cargar el catálogo de 400 productos
+ */
+export async function loadOptional400Catalog() {
+  await ensureBaseCategories()
   const db = await openLocalDB()
   const nowISO = new Date().toISOString()
 
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(['categories', 'products', 'lots', 'movements'], 'readwrite')
-    const catStore = tx.objectStore('categories')
+    const tx = db.transaction(['products', 'lots', 'movements'], 'readwrite')
     const prodStore = tx.objectStore('products')
     const lotStore = tx.objectStore('lots')
     const movStore = tx.objectStore('movements')
-
-    for (const cat of SEED_CATEGORIES) {
-      catStore.put({
-        id: String(cat.id),
-        name: cat.name,
-        description: cat.description || '',
-        created_at: nowISO,
-      })
-    }
 
     for (const p of SEED_PRODUCTS) {
       const lotId = `lot-${p.id}`
@@ -201,25 +305,25 @@ export async function ensureSeed400Products() {
         unit_cost: Number(initLot.unit_cost),
         entry_date: initLot.entry_date || '2026-11-01',
         expiration_date: initLot.expiration_date || null,
-        notes: 'Lote inicial semilla (Catálogo 400 productos)',
+        notes: 'Catálogo semilla opcional',
         created_at: nowISO,
       })
     }
 
     movStore.put({
-      id: 'mov-seed-initial',
+      id: `mov-seed-${Date.now()}`,
       product_id: SEED_PRODUCTS[0].id,
-      product_name: 'Catálogo Inicial (400 productos)',
+      product_name: 'Importación Manual Catálogo (400 productos)',
       product_sku: 'SEED-400',
       product_unit: 'und',
       lot_id: `lot-${SEED_PRODUCTS[0].id}`,
-      lot_number: 'L-2026-APERTURA',
+      lot_number: 'L-2026-IMPORT',
       movement_type: 'ENTRADA',
       quantity: 400,
       previous_stock: 0,
       new_stock: 400,
-      reason: 'Carga automática de 400 productos reales (Abarrotes, Víveres y Papelería)',
-      user_name: 'Sistema Onboarding',
+      reason: 'Importación opcional desde Ajustes',
+      user_name: 'Dueño',
       created_at: nowISO,
     })
 
@@ -229,8 +333,9 @@ export async function ensureSeed400Products() {
 }
 
 /**
- * Registra la tienda en el Onboarding (NIT, Nombre del dueño, Documento, Nombre del local, Dirección, Barrio)
- * y crea las cuentas operativas de Dueño y Tendero.
+ * Registra la tienda en el Onboarding:
+ * REQUISITO ESTRICTO: Cuando un dueño se registra, su tienda debe estar EN BLANCO.
+ * No se agregan los 400 productos automáticamente; se inicia el Tutorial Paso a Paso en el Paso 1.
  */
 export async function registerStoreOnboarding(payload) {
   const nit = String(payload.nit || '').trim()
@@ -247,6 +352,16 @@ export async function registerStoreOnboarding(payload) {
       'Todos los datos del establecimiento son obligatorios: NIT, Nombre del dueño, Documento de identidad, Nombre del local, Dirección y Barrio.'
     )
   }
+
+  // Limpiar productos, lotes y ventas previos para garantizar una tienda 100% en blanco al registrarse
+  await Promise.all([
+    clearObjectStore('products'),
+    clearObjectStore('lots'),
+    clearObjectStore('sales'),
+    clearObjectStore('movements'),
+  ])
+
+  await ensureBaseCategories()
 
   const nowISO = new Date().toISOString()
   const profile = {
@@ -288,8 +403,23 @@ export async function registerStoreOnboarding(payload) {
   await putInStore('users', ownerUser)
   await putInStore('users', tenderoUser)
 
+  // Sembrar una reseña inicial de bienvenida en el Muro de Reseñas Privado
+  const existingReviews = await getAllFromStore('reviews')
+  if (existingReviews.length === 0) {
+    await putInStore('reviews', {
+      id: 'rev-welcome-1',
+      author_name: owner_name,
+      author_role: 'Dueño',
+      store_name,
+      rating: 5,
+      category: 'Diseño y Usabilidad',
+      comment: `Tienda "${store_name}" configurada exitosamente en TiendApp. Lista para operar en PC y móvil.`,
+      created_at: nowISO,
+    })
+  }
+
   localStorage.setItem(LS_KEYS.STORE_PROFILE, JSON.stringify(profile))
-  await ensureSeed400Products()
+  saveTourStateSync({ active: true, step: 1, completed: false })
 
   const sessionUser = {
     id: ownerUser.id,
@@ -304,9 +434,6 @@ export async function registerStoreOnboarding(payload) {
   return { profile, user: sessionUser }
 }
 
-/**
- * Calcula el estado de un lote según fecha de vencimiento y cantidad
- */
 export function computeLotStatus(lot, todayISO = getTodayISO()) {
   const avail = Number(lot.available_quantity || 0)
   if (avail <= 0) {
@@ -328,9 +455,6 @@ export function computeLotStatus(lot, todayISO = getTodayISO()) {
   return { status: 'DISPONIBLE', days_to_expire: diffDays, is_sellable: true }
 }
 
-/**
- * Ordenamiento FEFO (primero el que vence antes) + FIFO (primero el que ingresó antes)
- */
 export function sortSellableLotsFEFO(lots, todayISO = getTodayISO()) {
   return lots
     .map((l) => ({ ...l, ...computeLotStatus(l, todayISO) }))
@@ -350,11 +474,8 @@ export function sortSellableLotsFEFO(lots, todayISO = getTodayISO()) {
     })
 }
 
-/**
- * Obtiene catálogo completo con existencias calculadas en tiempo real desde los lotes
- */
 export async function getCatalogWithStock() {
-  await ensureSeed400Products()
+  await ensureBaseCategories()
   const [categories, products, lots] = await Promise.all([
     getAllFromStore('categories'),
     getAllFromStore('products'),
@@ -437,10 +558,6 @@ export async function getInventoryMovements() {
   return movs.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
 }
 
-/**
- * Registra una venta descontando por método FEFO/FIFO y almacenando la foto de verificación
- * de transferencia (<canvas> + fecha y hora exacta timestamp).
- */
 export async function createLocalSale(payload, currentUser) {
   const itemsReq = payload.items || []
   if (itemsReq.length === 0) {
@@ -501,6 +618,8 @@ export async function createLocalSale(payload, currentUser) {
         lot_id: lot.id,
         lot_number: lot.lot_number,
         quantity: take,
+        previous_stock: avail,
+        new_stock: newAvail,
         expiration_date: lot.expiration_date,
       })
 
@@ -597,15 +716,12 @@ export async function createLocalSale(payload, currentUser) {
     tx.onerror = () => reject(tx.error)
   })
 
+  // Actualizar progreso del tutorial (Paso 2 -> Paso 3 al registrar primera venta)
+  syncTourProgress(products.length, existingSales.length + 1)
+
   return saleRecord
 }
 
-/**
- * Calcula las Métricas Rápidas para el panel del Dueño:
- * 1. Ventas del día (COP + nro transacciones + transferencias verificadas)
- * 2. Producto más vendido (nombre, SKU y unidades vendidas)
- * 3. Alerta de bajo stock (cantidad de productos con stock <= min_stock)
- */
 export function computeOwnerQuickMetrics(products = [], sales = []) {
   const today = getTodayISO()
 
@@ -615,9 +731,10 @@ export function computeOwnerQuickMetrics(products = [], sales = []) {
   })
 
   const todayTotalCOP = todaySales.reduce((acc, s) => acc + Number(s.total || 0), 0)
-  const verifiedTransfersCount = todaySales.filter((s) => Boolean(s.transfer_verification?.photo_data_url)).length
+  const verifiedTransfersCount = todaySales.filter((s) =>
+    Boolean(s.transfer_verification?.photo_data_url)
+  ).length
 
-  // Calcular Producto Más Vendido en todas las ventas (o ventas del día)
   const tally = new Map()
   for (const s of sales) {
     for (const item of s.items || []) {
@@ -664,7 +781,6 @@ export function computeOwnerQuickMetrics(products = [], sales = []) {
   }
 }
 
-// Operaciones CRUD adicionales para Dueño en IndexedDB
 export async function createOrUpdateCategoryLocal(payload) {
   const id = String(Date.now())
   const cat = {
@@ -679,14 +795,16 @@ export async function createOrUpdateCategoryLocal(payload) {
 
 export async function createProductLocal(payload, currentUser) {
   const nowISO = new Date().toISOString()
-  const id = `prod-custom-${Date.now()}`
-  const sku = String(payload.sku || '').trim().toUpperCase()
+  const id = `prod-${Date.now()}`
+  const sku = String(payload.sku || `SKU-${Date.now().toString().slice(-4)}`)
+    .trim()
+    .toUpperCase()
   const name = String(payload.name || '').trim()
 
   const newProd = {
     id,
     sku,
-    barcode: payload.barcode ? String(payload.barcode).trim() : null,
+    barcode: payload.barcode ? String(payload.barcode).trim() : `770${Date.now().toString().slice(-10)}`,
     name,
     category_id: String(payload.category_id || '1'),
     unit: payload.unit || 'und',
@@ -696,27 +814,32 @@ export async function createProductLocal(payload, currentUser) {
     is_active: true,
     image_url:
       payload.image_url ||
-      `https://picsum.photos/seed/kairo-${encodeURIComponent(sku)}/240/240`,
+      `https://picsum.photos/seed/tiendapp-${encodeURIComponent(sku)}/240/240`,
     created_at: nowISO,
     updated_at: nowISO,
   }
 
   await putInStore('products', newProd)
 
-  if (payload.initial_lot && Number(payload.initial_lot.quantity) > 0) {
+  const initQty = Number(payload.initial_lot?.quantity ?? 10)
+  if (initQty > 0) {
     await createLotLocal(
       {
         product_id: id,
-        lot_number: payload.initial_lot.lot_number || `L-${sku}-01`,
-        quantity: Number(payload.initial_lot.quantity),
-        unit_cost: Number(payload.initial_lot.unit_cost || 0),
-        entry_date: payload.initial_lot.entry_date || getTodayISO(),
-        expiration_date: payload.initial_lot.expiration_date || null,
-        notes: 'Lote inicial de creación',
+        lot_number: payload.initial_lot?.lot_number || `L-${sku}-01`,
+        quantity: initQty,
+        unit_cost: Number(payload.initial_lot?.unit_cost || newProd.unit_cost),
+        entry_date: payload.initial_lot?.entry_date || getTodayISO(),
+        expiration_date: payload.initial_lot?.expiration_date || null,
+        notes: 'Lote inicial de apertura',
       },
       currentUser
     )
   }
+
+  const allProds = await getAllFromStore('products')
+  const allSales = await getAllFromStore('sales')
+  syncTourProgress(allProds.length, allSales.length)
 
   return newProd
 }
@@ -941,4 +1064,37 @@ export async function authenticateLocalUser(username, password) {
   }
   setActiveSessionSync(sessionUser)
   return sessionUser
+}
+
+/**
+ * Sistema de Reseñas Privado ("Muro de Reseñas" exclusivo para usuarios logueados en /app)
+ */
+export async function getPrivateReviewsLocal() {
+  const reviews = await getAllFromStore('reviews')
+  return reviews.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
+}
+
+export async function createPrivateReviewLocal(payload, currentUser) {
+  const comment = String(payload.comment || '').trim()
+  const rating = Math.min(5, Math.max(1, Number(payload.rating || 5)))
+  const category = String(payload.category || 'General').trim()
+
+  if (comment.length < 4) {
+    throw new Error('Escribe una reseña de al menos 4 caracteres.')
+  }
+
+  const storeProfile = getStoredProfileSync()
+  const review = {
+    id: `rev-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    author_name: currentUser?.full_name || 'Usuario Autenticado',
+    author_role: currentUser?.role_name || 'Dueño',
+    store_name: storeProfile?.store_name || 'Mi Tienda',
+    rating,
+    category,
+    comment,
+    created_at: new Date().toISOString(),
+  }
+
+  await putInStore('reviews', review)
+  return review
 }

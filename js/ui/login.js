@@ -48,7 +48,7 @@ export function renderAuthScreen(container, onAuthenticated) {
             <p class="auth-description">
               ${
                 isSetup
-                  ? 'Ingresa la información legal y de ubicación del comercio. Se cargarán automáticamente 400 productos reales (Abarrotes, Víveres y Papelería) en IndexedDB.'
+                  ? 'Tu tienda se creará 100% en blanco (sin productos ficticios) e iniciará el Tutorial Paso a Paso.'
                   : `${escapeHTML(store?.address || '')} · Barrio ${escapeHTML(store?.neighborhood || '')} · NIT ${escapeHTML(store?.nit || '')}`
               }
             </p>
@@ -165,7 +165,7 @@ export function renderAuthScreen(container, onAuthenticated) {
                 <div id="auth-error" class="alert-error" role="alert" hidden></div>
 
                 <button type="submit" id="setup-submit-btn" class="btn btn-primary btn-block">
-                  Crear Tienda y Cargar 400 Productos
+                  Crear Tienda en Blanco e Iniciar Tutorial
                 </button>
               </form>
             `
@@ -272,7 +272,7 @@ export function renderAuthScreen(container, onAuthenticated) {
       } catch (err) {
         displayError(err.message || 'No se pudo completar el registro de la tienda.')
         submitBtn.disabled = false
-        submitBtn.textContent = 'Crear Tienda y Cargar 400 Productos'
+        submitBtn.textContent = 'Crear Tienda en Blanco e Iniciar Tutorial'
       }
     })
   } else {

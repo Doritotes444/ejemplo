@@ -14,7 +14,11 @@ import {
 import { isRouteAllowed } from '../js/core/permissions.js'
 import { calculateChange, formatCOP } from '../js/utils/money.js'
 import { SEED_PRODUCTS, SEED_CATEGORIES } from '../js/data/db.js'
-import { computeOwnerQuickMetrics, sortSellableLotsFEFO } from '../js/core/localStore.js'
+import {
+  computeOwnerQuickMetrics,
+  sortSellableLotsFEFO,
+  buildAestheticFallbackSVG,
+} from '../js/core/localStore.js'
 
 function assert(condition, message) {
   if (!condition) {
@@ -78,11 +82,15 @@ const tenderoUser = { id: 'u1', role: 'tendero' }
 const duenoUser = { id: 'u2', role: 'dueno' }
 
 assert(isRouteAllowed(tenderoUser, 'pos') === true, 'Tendero puede acceder a POS')
+assert(isRouteAllowed(tenderoUser, 'reviews') === true, 'Tendero puede acceder al Muro de Reseñas privado')
 assert(isRouteAllowed(tenderoUser, 'products') === false, 'Tendero NO puede acceder a productos')
 assert(isRouteAllowed(tenderoUser, 'lots') === false, 'Tendero NO puede acceder a lotes')
 assert(isRouteAllowed(tenderoUser, 'users') === false, 'Tendero NO puede acceder a usuarios')
+assert(isRouteAllowed(tenderoUser, 'settings') === false, 'Tendero NO puede acceder a ajustes')
 assert(isRouteAllowed(duenoUser, 'users') === true, 'Dueño puede acceder a usuarios')
 assert(isRouteAllowed(duenoUser, 'lots') === true, 'Dueño puede acceder a lotes')
+assert(isRouteAllowed(duenoUser, 'reviews') === true, 'Dueño puede acceder al Muro de Reseñas privado')
+assert(isRouteAllowed(duenoUser, 'settings') === true, 'Dueño puede acceder a Ajustes')
 
 // 4. Ordenamiento FEFO / FIFO y Métricas Rápidas del Dueño
 const sortedLots = sortSellableLotsFEFO(
@@ -99,4 +107,9 @@ assert(sortedLots[0].id === 'l2', 'Prioriza FEFO (vence primero l2)')
 const metrics = computeOwnerQuickMetrics(SEED_PRODUCTS, [])
 assert(metrics.low_stock_count > 0, 'Detecta productos con alerta de bajo stock en el catálogo semilla')
 
-console.log('OK: Todas las pruebas de frontend (400 Productos COP, Carrito, FEFO/FIFO, Métricas Rápidas y RBAC) pasaron.')
+// 5. Fallback estético SVG (onerror) para miniaturas de productos
+const fallbackSvg = buildAestheticFallbackSVG('Cafe Aguila Roja 500g', 'ABAR-001')
+assert(fallbackSvg.startsWith('data:image/svg+xml;utf8,'), 'Genera Data-URI SVG estético válido')
+assert(decodeURIComponent(fallbackSvg).includes('CA'), 'Incluye monograma de iniciales del producto')
+
+console.log('OK: Todas las pruebas de frontend (Catálogo COP, Carrito, FEFO/FIFO, Métricas Rápidas, RBAC, Reseñas/Ajustes y Fallback SVG) pasaron.')

@@ -4,18 +4,18 @@ import {
   setActiveSessionSync,
   registerStoreOnboarding,
   authenticateLocalUser,
-  ensureSeed400Products,
+  ensureBaseCategories,
 } from './localStore.js'
 
 /**
- * Gestión de Autenticación, Onboarding de Tienda y Sesión en LocalStorage / IndexedDB.
+ * Gestión de Autenticación, Onboarding de Tienda (en blanco) y Sesión en LocalStorage / IndexedDB.
  */
 
 export async function fetchAuthStatus() {
   const profile = getStoredProfileSync()
   const activeUser = getActiveSessionSync()
   if (profile) {
-    await ensureSeed400Products()
+    await ensureBaseCategories()
   }
   return {
     initialized: Boolean(profile),

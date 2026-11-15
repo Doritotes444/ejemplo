@@ -335,7 +335,7 @@ export function openProductFormModal(product = null, refreshAll) {
               </div>
               <div class="form-field">
                 <label for="p-lot-qty">Cantidad Inicial</label>
-                <input id="p-lot-qty" type="number" step="0.001" min="0" value="0" />
+                <input id="p-lot-qty" type="number" step="0.001" min="0" value="10" />
               </div>
               <div class="form-field">
                 <label for="p-lot-cost">Costo Unitario (COP)</label>
