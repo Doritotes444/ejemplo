@@ -23,11 +23,11 @@ export function renderAuthScreen(container, onAuthenticated) {
   container.innerHTML = `
     <div class="auth-layout">
       <header class="auth-topbar">
-        <a href="/" class="brand-lockup" title="Ir a la página pública">
+        <a href="../?stay=1" class="brand-lockup" title="Ir a la página pública">
           ${BRAND_LOGO_SVG}
         </a>
         <div class="header-right">
-          <a href="/?stay=1" class="btn btn-ghost btn-sm">Ver Landing Pública</a>
+          <a href="../?stay=1" class="btn btn-ghost btn-sm">Ver Landing Pública</a>
           <button
             type="button"
             id="auth-theme-toggle"

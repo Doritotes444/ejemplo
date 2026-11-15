@@ -65,8 +65,9 @@ function initLandingPage() {
   const activeSession = getActiveSessionSync()
 
   // Requisito 1: Si el usuario ya está registrado/logueado, redirigir automáticamente a /app/
+  const targetAppUrl = new URL('./app/', window.location.href).href
   if ((existingProfile || activeSession) && !stayOnLanding) {
-    window.location.replace('/app/')
+    window.location.replace(targetAppUrl)
     return
   }
 
@@ -113,7 +114,7 @@ function initLandingPage() {
         address,
         neighborhood,
       })
-      window.location.assign('/app/')
+      window.location.assign(new URL('./app/', window.location.href).href)
     } catch (err) {
       if (errBox) {
         errBox.textContent = err.message || 'Error al registrar la tienda.'
