@@ -6,7 +6,7 @@ import {
 import { getState } from '../state.js'
 
 export async function fetchLots() {
-  return getEnrichedLots()
+  return getEnrichedLots(getState().user)
 }
 
 export async function createLotRequest(payload) {

@@ -188,15 +188,21 @@ export function bindSettingsViewEvents(root, refreshAll) {
 
   root.querySelector('#btn-seed-optional-400')?.addEventListener('click', async () => {
     const btn = root.querySelector('#btn-seed-optional-400')
+    const originalHTML = btn?.innerHTML || ''
     if (btn) {
       btn.disabled = true
       btn.textContent = 'Importando 400 productos...'
     }
     try {
-      await loadOptional400Catalog()
+      const { getState } = await import('../state.js')
+      await loadOptional400Catalog(getState().user)
       if (typeof refreshAll === 'function') await refreshAll()
       showToast('ok', 'Catálogo demo de 400 productos importado en IndexedDB.')
     } catch (err) {
+      if (btn) {
+        btn.disabled = false
+        btn.innerHTML = originalHTML
+      }
       showToast('error', err.message || 'Error al importar catálogo.')
     }
   })

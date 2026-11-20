@@ -251,7 +251,7 @@ export function renderAuthScreen(container, onAuthenticated) {
       const password = container.querySelector('#setup-password')?.value || ''
 
       submitBtn.disabled = true
-      submitBtn.textContent = 'Inicializando tienda y 400 productos...'
+      submitBtn.textContent = 'Creando tienda en blanco...'
       try {
         const res = await setupOwnerAccount({
           nit,
@@ -310,12 +310,15 @@ export function renderAuthScreen(container, onAuthenticated) {
 
     container.querySelector('#btn-quick-dueno')?.addEventListener('click', async () => {
       try {
-        const users = await import('../services/users.js').then((m) => m.fetchUsers())
-        const owner = users.find((u) => u.role === 'dueno')
+        const owner = await import('../core/localStore.js').then((m) =>
+          m.findQuickLoginOwnerLocal()
+        )
         if (owner) {
           const res = await loginWithCredentials(owner.username, owner.password)
           setState({ user: res.user })
           await onAuthenticated(res.user)
+        } else {
+          displayError('No se encontró una cuenta de Dueño activa.')
         }
       } catch (err) {
         displayError(err.message)

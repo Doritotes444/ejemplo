@@ -37,39 +37,99 @@ export function getTodayISO() {
   return `${y}-${m}-${day}`
 }
 
+export const PRODUCT_COLOR_PALETTE = [
+  { id: 'slate', label: 'Grafito', bg: '#1e293b', accent: '#60a5fa' },
+  { id: 'emerald', label: 'Esmeralda', bg: '#064e3b', accent: '#34d399' },
+  { id: 'amber', label: 'Ámbar', bg: '#78350f', accent: '#fbbf24' },
+  { id: 'rose', label: 'Terracota', bg: '#881337', accent: '#fb7185' },
+  { id: 'indigo', label: 'Índigo', bg: '#312e81', accent: '#818cf8' },
+  { id: 'teal', label: 'Petróleo', bg: '#134e4a', accent: '#2dd4bf' },
+]
+
+export const VALID_PRODUCT_UNITS = new Set(['und', 'kg', 'lb', 'lt', 'gr', 'caja'])
+
+export function assertOwnerAccess(currentUser, actionLabel = 'realizar esta operación') {
+  const user = currentUser || getActiveSessionSync()
+  if (!user || user.role !== 'dueno') {
+    throw new Error(`Permiso denegado: solo el Dueño puede ${actionLabel}.`)
+  }
+  return user
+}
+
+export function isValidISODate(dateStr) {
+  if (!dateStr) return false
+  const clean = String(dateStr).trim().slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(clean)) return false
+  const [y, m, d] = clean.split('-').map(Number)
+  const dt = new Date(Date.UTC(y, m - 1, d))
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d
+}
+
+export function generateUniqueSKU(name = 'PROD', existingProducts = []) {
+  const normalized = String(name || 'PRD')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9\s]/g, '')
+    .trim()
+  const words = normalized.split(/\s+/).filter(Boolean)
+  let prefix = ''
+  if (words.length >= 2) {
+    prefix = (words[0].slice(0, 3) + words[1].slice(0, 2)).toUpperCase()
+  } else if (words.length === 1) {
+    prefix = words[0].slice(0, 4).toUpperCase()
+  }
+  if (prefix.length < 2) prefix = 'PRD'
+
+  const existingSet = new Set(
+    (existingProducts || []).map((p) => String(p.sku || '').trim().toUpperCase())
+  )
+  for (let i = 1; i <= 999; i++) {
+    const candidate = `${prefix}-${String(i).padStart(3, '0')}`
+    if (!existingSet.has(candidate)) return candidate
+  }
+  return `${prefix}-${Date.now().toString().slice(-4)}`
+}
+
 /**
  * Genera una miniatura SVG estética en Data URI como fallback infalible (onerror)
  * para que jamás se muestre un ícono de imagen rota.
  */
-export function buildAestheticFallbackSVG(name = 'Producto', sku = 'POS') {
-  const initials = String(name || 'PR')
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((w) => w[0] || '')
-    .join('')
-    .toUpperCase() || 'PR'
+export function buildAestheticFallbackSVG(name = 'Producto', sku = 'POS', colorId = 'slate') {
+  const palette =
+    PRODUCT_COLOR_PALETTE.find((c) => c.id === colorId) || PRODUCT_COLOR_PALETTE[0]
+  const initials =
+    String(name || 'PR')
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((w) => w[0] || '')
+      .join('')
+      .toUpperCase() || 'PR'
   const cleanSku = String(sku || 'ITEM').slice(0, 10).toUpperCase()
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160">
     <defs>
       <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%" stop-color="#141b26"/>
-        <stop offset="100%" stop-color="#1e293b"/>
+        <stop offset="0%" stop-color="${palette.bg}"/>
+        <stop offset="100%" stop-color="#0f172a"/>
       </linearGradient>
     </defs>
     <rect width="160" height="160" rx="14" fill="url(#g)"/>
-    <circle cx="80" cy="66" r="28" fill="rgba(59,130,246,0.14)" stroke="rgba(59,130,246,0.4)" stroke-width="1.5"/>
-    <text x="80" y="74" text-anchor="middle" fill="#60a5fa" font-family="system-ui,sans-serif" font-size="22" font-weight="700">${initials.replace(/[<>&"']/g, '')}</text>
-    <text x="80" y="124" text-anchor="middle" fill="#94a3b8" font-family="monospace" font-size="12" font-weight="600">${cleanSku.replace(/[<>&"']/g, '')}</text>
+    <circle cx="80" cy="66" r="28" fill="rgba(255,255,255,0.08)" stroke="${palette.accent}" stroke-opacity="0.55" stroke-width="1.5"/>
+    <text x="80" y="74" text-anchor="middle" fill="${palette.accent}" font-family="system-ui,sans-serif" font-size="22" font-weight="700">${initials.replace(/[<>&"']/g, '')}</text>
+    <text x="80" y="124" text-anchor="middle" fill="#cbd5e1" font-family="monospace" font-size="12" font-weight="600">${cleanSku.replace(/[<>&"']/g, '')}</text>
   </svg>`
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`
 }
 
 if (typeof window !== 'undefined') {
-  window.handleProductImageError = function (imgEl, name, sku) {
+  window.handleProductImageError = function (imgEl, name, sku, colorId) {
     if (!imgEl || imgEl.dataset.fallbackApplied === '1') return
     imgEl.dataset.fallbackApplied = '1'
-    imgEl.src = buildAestheticFallbackSVG(name || imgEl.alt || 'Producto', sku || 'ITEM')
+    imgEl.src = buildAestheticFallbackSVG(
+      name || imgEl.alt || 'Producto',
+      sku || imgEl.dataset.sku || 'ITEM',
+      colorId || imgEl.dataset.color || 'slate'
+    )
   }
 }
 
@@ -258,7 +318,8 @@ export async function ensureBaseCategories() {
 /**
  * Opción manual (solo bajo petición explícita en Ajustes) para cargar el catálogo de 400 productos
  */
-export async function loadOptional400Catalog() {
+export async function loadOptional400Catalog(currentUser) {
+  assertOwnerAccess(currentUser, 'importar el catálogo demo')
   await ensureBaseCategories()
   const db = await openLocalDB()
   const nowISO = new Date().toISOString()
@@ -504,14 +565,20 @@ export async function getCatalogWithStock() {
         .reduce((acc, l) => acc + Number(l.available_quantity || 0), 0)
         .toFixed(3)
     )
+    const expiring_soon_count = sellable.filter((l) => l.status === 'PROXIMO_A_VENCER').length
     const nextLot = sellable[0] || null
+    const catIdStr = p.category_id != null && p.category_id !== '' ? String(p.category_id) : null
 
     return {
       ...p,
-      category_name: catMap.get(String(p.category_id)) || p.category_name || 'General',
+      category_id: catIdStr,
+      category_name: catIdStr
+        ? catMap.get(catIdStr) || p.category_name || 'Sin categoría'
+        : 'Sin categoría',
       available_stock,
       expired_stock,
       active_lots_count: sellable.length,
+      expiring_soon_count,
       next_lot_number: nextLot ? nextLot.lot_number : null,
       next_expiration: nextLot ? nextLot.expiration_date : null,
       is_low_stock: available_stock <= Number(p.min_stock ?? 5),
@@ -524,7 +591,8 @@ export async function getCatalogWithStock() {
   }
 }
 
-export async function getEnrichedLots() {
+export async function getEnrichedLots(currentUser) {
+  assertOwnerAccess(currentUser, 'consultar los lotes de inventario')
   const [products, lots] = await Promise.all([
     getAllFromStore('products'),
     getAllFromStore('lots'),
@@ -553,14 +621,20 @@ export async function getEnrichedLots() {
     })
 }
 
-export async function getInventoryMovements() {
+export async function getInventoryMovements(currentUser) {
+  assertOwnerAccess(currentUser, 'consultar el historial de movimientos (Kardex)')
   const movs = await getAllFromStore('movements')
   return movs.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
 }
 
 export async function createLocalSale(payload, currentUser) {
-  const itemsReq = payload.items || []
-  if (itemsReq.length === 0) {
+  const actor = currentUser || getActiveSessionSync()
+  if (!actor) {
+    throw new Error('Debes iniciar sesión para registrar una venta.')
+  }
+
+  const rawItems = Array.isArray(payload?.items) ? payload.items : []
+  if (rawItems.length === 0) {
     throw new Error('El ticket de venta está vacío.')
   }
 
@@ -570,40 +644,62 @@ export async function createLocalSale(payload, currentUser) {
     getAllFromStore('sales'),
   ])
 
+  // Idempotencia estricta por client_operation_id: evita duplicar ventas y descuentos ante doble clic o reintento
+  const clientOpId = payload.client_operation_id ? String(payload.client_operation_id).trim() : ''
+  if (clientOpId) {
+    const duplicate = existingSales.find((s) => s.client_operation_id === clientOpId)
+    if (duplicate) {
+      return duplicate
+    }
+  }
+
+  // Consolidar líneas repetidas del mismo producto antes de asignar lotes
+  const consolidatedMap = new Map()
+  for (const line of rawItems) {
+    const pid = String(line.product_id || '').trim()
+    const qty = Number(line.quantity)
+    if (!pid || !Number.isFinite(qty) || qty <= 0) {
+      throw new Error('Hay un artículo con cantidad inválida en el ticket.')
+    }
+    const prev = consolidatedMap.get(pid) || 0
+    consolidatedMap.set(pid, Number((prev + qty).toFixed(3)))
+  }
+
   const today = getTodayISO()
   const nowISO = new Date().toISOString()
   const prodMap = new Map(products.map((p) => [p.id, p]))
+  // Clonar lotes para no mutar registros originales si ocurre un error de validación a mitad del proceso
+  const clonedLots = lots.map((l) => ({ ...l }))
 
   let total = 0
   const saleItems = []
-  const lotsToUpdate = []
+  const updatedLotsMap = new Map()
   const movementsToCreate = []
 
-  for (const line of itemsReq) {
-    const p = prodMap.get(line.product_id)
+  for (const [productId, qtyNeeded] of consolidatedMap.entries()) {
+    const p = prodMap.get(productId)
     if (!p || !p.is_active) {
       throw new Error('Uno de los productos seleccionados no está activo.')
     }
-    const qtyNeeded = Number(line.quantity)
-    if (!Number.isFinite(qtyNeeded) || qtyNeeded <= 0) {
-      throw new Error(`Cantidad inválida para ${p.name}.`)
-    }
 
-    const prodLots = lots.filter((l) => l.product_id === p.id)
+    const prodLots = clonedLots.filter((l) => l.product_id === p.id)
     const sellableLots = sortSellableLotsFEFO(prodLots, today)
-    const totalAvail = sellableLots.reduce((s, l) => s + Number(l.available_quantity), 0)
+    const totalAvail = Number(
+      sellableLots.reduce((s, l) => s + Number(l.available_quantity || 0), 0).toFixed(3)
+    )
 
     if (qtyNeeded > totalAvail + 1e-6) {
       throw new Error(
-        `Stock insuficiente para "${p.name}". Disponible: ${totalAvail} ${p.unit}.`
+        `Stock insuficiente para "${p.name}". Disponible vigente: ${totalAvail} ${p.unit}.`
       )
     }
 
     let remaining = qtyNeeded
     const allocations = []
 
-    for (const lot of sellableLots) {
+    for (const sortedLot of sellableLots) {
       if (remaining <= 0) break
+      const lot = clonedLots.find((l) => l.id === sortedLot.id)
       const avail = Number(lot.available_quantity)
       const take = Number(Math.min(avail, remaining).toFixed(3))
       if (take <= 0) continue
@@ -612,7 +708,8 @@ export async function createLocalSale(payload, currentUser) {
       remaining = Number((remaining - take).toFixed(3))
 
       lot.available_quantity = newAvail
-      lotsToUpdate.push(lot)
+      lot.updated_at = nowISO
+      updatedLotsMap.set(lot.id, lot)
 
       allocations.push({
         lot_id: lot.id,
@@ -636,7 +733,7 @@ export async function createLocalSale(payload, currentUser) {
         previous_stock: avail,
         new_stock: newAvail,
         reason: `Venta en POS`,
-        user_name: currentUser?.full_name || 'Operador POS',
+        user_name: actor.full_name || 'Operador POS',
         created_at: nowISO,
       })
     }
@@ -663,35 +760,55 @@ export async function createLocalSale(payload, currentUser) {
     bancolombia: 'Bancolombia (Transferencia)',
     daviplata: 'Daviplata',
   }
+  if (!methodLabels[paymentMethod]) {
+    throw new Error('Método de pago no válido.')
+  }
 
-  const amountReceived =
-    paymentMethod === 'efectivo' && payload.amount_received
-      ? Number(payload.amount_received)
-      : total
+  const hasExplicitCash =
+    paymentMethod === 'efectivo' &&
+    payload.amount_received !== undefined &&
+    payload.amount_received !== null &&
+    payload.amount_received !== ''
 
-  if (paymentMethod === 'efectivo' && amountReceived < total) {
+  const amountReceived = hasExplicitCash ? Number(payload.amount_received) : total
+
+  if (
+    paymentMethod === 'efectivo' &&
+    (!Number.isFinite(amountReceived) || amountReceived < total)
+  ) {
     throw new Error('El efectivo recibido es menor al total a cobrar.')
   }
 
-  const folioNumber = existingSales.length + 1
+  // Calcular siguiente folio de manera segura a partir del máximo existente
+  let maxFolioNum = 0
+  for (const s of existingSales) {
+    const match = String(s.folio || '').match(/(\d+)$/)
+    if (match) {
+      const n = Number(match[1])
+      if (n > maxFolioNum) maxFolioNum = n
+    }
+  }
+  const folioNumber = Math.max(existingSales.length, maxFolioNum) + 1
   const folio = `POS-${String(folioNumber).padStart(6, '0')}`
   const storeProfile = getStoredProfileSync()
+  const saleNotes = String(payload.notes || '').trim() || null
 
   const saleRecord = {
     id: `sale-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     folio,
-    client_operation_id: payload.client_operation_id || folio,
+    client_operation_id: clientOpId || folio,
     created_at: nowISO,
     date_iso: today,
-    seller_id: currentUser?.id || 'usr-tendero-1',
-    seller_name: currentUser?.full_name || 'Tendero',
-    seller_username: currentUser?.username || 'tendero',
+    seller_id: actor.id || 'usr-tendero-1',
+    seller_name: actor.full_name || 'Tendero',
+    seller_username: actor.username || 'tendero',
     payment_method: paymentMethod,
-    payment_method_name: methodLabels[paymentMethod] || paymentMethod,
+    payment_method_name: methodLabels[paymentMethod],
     subtotal: total,
     total,
     amount_received: amountReceived,
     change_amount: Math.max(0, amountReceived - total),
+    notes: saleNotes,
     items: saleItems,
     store_snapshot: storeProfile || null,
     transfer_verification: payload.transfer_verification || null,
@@ -700,6 +817,8 @@ export async function createLocalSale(payload, currentUser) {
   for (const m of movementsToCreate) {
     m.reason = `Venta ${folio} (${saleRecord.payment_method_name})`
   }
+
+  const lotsToUpdate = Array.from(updatedLotsMap.values())
 
   const db = await openLocalDB()
   await new Promise((resolve, reject) => {
@@ -714,6 +833,7 @@ export async function createLocalSale(payload, currentUser) {
 
     tx.oncomplete = () => resolve()
     tx.onerror = () => reject(tx.error)
+    tx.onabort = () => reject(tx.error || new Error('Transacción abortada al guardar la venta.'))
   })
 
   // Actualizar progreso del tutorial (Paso 2 -> Paso 3 al registrar primera venta)
@@ -781,12 +901,22 @@ export function computeOwnerQuickMetrics(products = [], sales = []) {
   }
 }
 
-export async function createOrUpdateCategoryLocal(payload) {
-  const id = String(Date.now())
+export async function createOrUpdateCategoryLocal(payload, currentUser) {
+  assertOwnerAccess(currentUser, 'gestionar categorías')
+  const name = String(payload?.name || '').trim()
+  if (name.length < 2) {
+    throw new Error('El nombre de la categoría debe tener al menos 2 caracteres.')
+  }
+  const existing = await getAllFromStore('categories')
+  const duplicate = existing.find((c) => String(c.name || '').trim().toLowerCase() === name.toLowerCase())
+  if (duplicate) {
+    throw new Error(`Ya existe una categoría llamada "${duplicate.name}".`)
+  }
+  const id = `cat-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`
   const cat = {
     id,
-    name: String(payload.name || '').trim(),
-    description: String(payload.description || '').trim(),
+    name,
+    description: String(payload?.description || '').trim(),
     created_at: new Date().toISOString(),
   }
   await putInStore('categories', cat)
@@ -794,91 +924,387 @@ export async function createOrUpdateCategoryLocal(payload) {
 }
 
 export async function createProductLocal(payload, currentUser) {
+  const actor = assertOwnerAccess(currentUser, 'crear productos')
+
+  const [existingProducts, existingCategories] = await Promise.all([
+    getAllFromStore('products'),
+    getAllFromStore('categories'),
+  ])
+
+  const name = String(payload?.name || '').trim()
+  if (name.length < 2) {
+    throw new Error('El nombre del producto es obligatorio (mínimo 2 caracteres).')
+  }
+
+  const rawSku = String(payload?.sku || '').trim().toUpperCase()
+  const sku = rawSku || generateUniqueSKU(name, existingProducts)
+
+  if (existingProducts.some((p) => String(p.sku || '').trim().toUpperCase() === sku)) {
+    throw new Error(
+      `Ya existe un producto con el SKU "${sku}". Cambia el SKU o déjalo vacío para generar uno automático.`
+    )
+  }
+
+  const rawBarcode = payload?.barcode != null ? String(payload.barcode).trim() : ''
+  const barcode = rawBarcode || null
+  if (
+    barcode &&
+    existingProducts.some(
+      (p) => p.barcode && String(p.barcode).trim().toLowerCase() === barcode.toLowerCase()
+    )
+  ) {
+    throw new Error(
+      `El código de barras "${barcode}" ya pertenece a otro producto. Verifica el código o déjalo vacío.`
+    )
+  }
+
+  const unit = String(payload?.unit || 'und').trim().toLowerCase()
+  if (!VALID_PRODUCT_UNITS.has(unit)) {
+    throw new Error('La unidad de medida seleccionada no es válida.')
+  }
+
+  const salePrice = Number(payload?.sale_price)
+  if (!Number.isFinite(salePrice) || salePrice <= 0) {
+    throw new Error('El precio de venta debe ser un número mayor a $0.')
+  }
+
+  const minStock =
+    payload?.min_stock === '' || payload?.min_stock === undefined || payload?.min_stock === null
+      ? 5
+      : Number(payload.min_stock)
+  if (!Number.isFinite(minStock) || minStock < 0) {
+    throw new Error('La alerta de stock mínimo debe ser 0 o mayor.')
+  }
+
+  const rawCost =
+    payload?.unit_cost !== undefined && payload?.unit_cost !== '' && payload?.unit_cost !== null
+      ? Number(payload.unit_cost)
+      : payload?.initial_lot?.unit_cost !== undefined &&
+          payload?.initial_lot?.unit_cost !== '' &&
+          payload?.initial_lot?.unit_cost !== null
+        ? Number(payload.initial_lot.unit_cost)
+        : 0
+  if (!Number.isFinite(rawCost) || rawCost < 0) {
+    throw new Error('El costo unitario no puede ser negativo.')
+  }
+
+  const categoryId =
+    payload?.category_id !== undefined && payload?.category_id !== null && String(payload.category_id).trim() !== ''
+      ? String(payload.category_id).trim()
+      : null
+  const matchedCategory = categoryId
+    ? existingCategories.find((c) => String(c.id) === categoryId)
+    : null
+
+  const colorTag = PRODUCT_COLOR_PALETTE.some((c) => c.id === payload?.color_tag)
+    ? payload.color_tag
+    : 'slate'
+  const description = String(payload?.description || '').trim()
+  const imageUrl = payload?.image_url ? String(payload.image_url).trim() : null
+
+  // Validar lote inicial opcional ANTES de escribir nada en IndexedDB
+  let initialLotRecord = null
+  let initialMovementRecord = null
   const nowISO = new Date().toISOString()
-  const id = `prod-${Date.now()}`
-  const sku = String(payload.sku || `SKU-${Date.now().toString().slice(-4)}`)
-    .trim()
-    .toUpperCase()
-  const name = String(payload.name || '').trim()
+  const id = `prod-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`
+
+  const rawInitLot = payload?.initial_lot
+  if (rawInitLot && rawInitLot.quantity !== undefined && rawInitLot.quantity !== '' && rawInitLot.quantity !== null) {
+    const initQty = Number(rawInitLot.quantity)
+    if (!Number.isFinite(initQty) || initQty < 0) {
+      throw new Error('La cantidad inicial del lote debe ser 0 o mayor.')
+    }
+    if (initQty > 0) {
+      const lotNumber = String(rawInitLot.lot_number || `L-${sku}-01`).trim().toUpperCase()
+      const lotCost =
+        rawInitLot.unit_cost !== undefined && rawInitLot.unit_cost !== '' && rawInitLot.unit_cost !== null
+          ? Number(rawInitLot.unit_cost)
+          : rawCost
+      if (!Number.isFinite(lotCost) || lotCost < 0) {
+        throw new Error('El costo unitario del lote inicial no puede ser negativo.')
+      }
+      const entryDate = String(rawInitLot.entry_date || getTodayISO()).trim().slice(0, 10)
+      if (!isValidISODate(entryDate)) {
+        throw new Error('La fecha de ingreso del lote inicial no es válida.')
+      }
+      const expirationDate = rawInitLot.expiration_date
+        ? String(rawInitLot.expiration_date).trim().slice(0, 10)
+        : null
+      if (expirationDate && !isValidISODate(expirationDate)) {
+        throw new Error('La fecha de vencimiento del lote inicial no es válida.')
+      }
+
+      const lotId = `lot-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+      initialLotRecord = {
+        id: lotId,
+        product_id: id,
+        lot_number: lotNumber,
+        initial_quantity: Number(initQty.toFixed(3)),
+        available_quantity: Number(initQty.toFixed(3)),
+        unit_cost: Number(lotCost.toFixed(2)),
+        entry_date: entryDate,
+        expiration_date: expirationDate,
+        notes: String(rawInitLot.notes || 'Lote inicial de apertura').trim(),
+        created_at: nowISO,
+      }
+      initialMovementRecord = {
+        id: `mov-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        product_id: id,
+        product_name: name,
+        product_sku: sku,
+        product_unit: unit,
+        lot_id: lotId,
+        lot_number: lotNumber,
+        movement_type: 'ENTRADA',
+        quantity: Number(initQty.toFixed(3)),
+        previous_stock: 0,
+        new_stock: Number(initQty.toFixed(3)),
+        reason: initialLotRecord.notes || 'Lote inicial de apertura',
+        user_name: actor.full_name || 'Dueño',
+        created_at: nowISO,
+      }
+    }
+  }
 
   const newProd = {
     id,
     sku,
-    barcode: payload.barcode ? String(payload.barcode).trim() : `770${Date.now().toString().slice(-10)}`,
+    barcode,
     name,
-    category_id: String(payload.category_id || '1'),
-    unit: payload.unit || 'und',
-    sale_price: Number(payload.sale_price),
-    unit_cost: Number(payload.initial_lot?.unit_cost || Math.round(Number(payload.sale_price) * 0.7)),
-    min_stock: Number(payload.min_stock ?? 5),
+    description,
+    category_id: categoryId,
+    category_name: matchedCategory ? matchedCategory.name : 'Sin categoría',
+    unit,
+    sale_price: Number(salePrice.toFixed(2)),
+    unit_cost: Number(rawCost.toFixed(2)),
+    min_stock: Number(minStock.toFixed(3)),
+    color_tag: colorTag,
     is_active: true,
-    image_url:
-      payload.image_url ||
-      `https://picsum.photos/seed/tiendapp-${encodeURIComponent(sku)}/240/240`,
+    image_url: imageUrl,
     created_at: nowISO,
     updated_at: nowISO,
   }
 
-  await putInStore('products', newProd)
+  // Persistencia atómica: producto + lote inicial + movimiento en una sola transacción
+  const db = await openLocalDB()
+  await new Promise((resolve, reject) => {
+    const stores = initialLotRecord ? ['products', 'lots', 'movements'] : ['products']
+    const tx = db.transaction(stores, 'readwrite')
+    tx.objectStore('products').put(newProd)
+    if (initialLotRecord) {
+      tx.objectStore('lots').put(initialLotRecord)
+      tx.objectStore('movements').put(initialMovementRecord)
+    }
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+    tx.onabort = () => reject(tx.error || new Error('No se pudo guardar el producto.'))
+  })
 
-  const initQty = Number(payload.initial_lot?.quantity ?? 10)
-  if (initQty > 0) {
-    await createLotLocal(
-      {
-        product_id: id,
-        lot_number: payload.initial_lot?.lot_number || `L-${sku}-01`,
-        quantity: initQty,
-        unit_cost: Number(payload.initial_lot?.unit_cost || newProd.unit_cost),
-        entry_date: payload.initial_lot?.entry_date || getTodayISO(),
-        expiration_date: payload.initial_lot?.expiration_date || null,
-        notes: 'Lote inicial de apertura',
-      },
-      currentUser
-    )
-  }
-
-  const allProds = await getAllFromStore('products')
-  const allSales = await getAllFromStore('sales')
+  const [allProds, allSales] = await Promise.all([
+    getAllFromStore('products'),
+    getAllFromStore('sales'),
+  ])
   syncTourProgress(allProds.length, allSales.length)
 
   return newProd
 }
 
-export async function updateProductLocal(productId, payload) {
-  const products = await getAllFromStore('products')
+export async function updateProductLocal(productId, payload, currentUser) {
+  assertOwnerAccess(currentUser, 'editar productos')
+
+  const [products, categories] = await Promise.all([
+    getAllFromStore('products'),
+    getAllFromStore('categories'),
+  ])
   const target = products.find((p) => p.id === productId)
   if (!target) throw new Error('Producto no encontrado.')
 
+  const name =
+    payload?.name !== undefined ? String(payload.name).trim() : String(target.name || '').trim()
+  if (name.length < 2) {
+    throw new Error('El nombre del producto es obligatorio (mínimo 2 caracteres).')
+  }
+
+  const sku =
+    payload?.sku !== undefined
+      ? String(payload.sku).trim().toUpperCase()
+      : String(target.sku || '').trim().toUpperCase()
+  if (!sku) {
+    throw new Error('El código SKU no puede quedar vacío.')
+  }
+  if (
+    products.some(
+      (p) => p.id !== productId && String(p.sku || '').trim().toUpperCase() === sku
+    )
+  ) {
+    throw new Error(`El SKU "${sku}" ya está asignado a otro producto.`)
+  }
+
+  let barcode = target.barcode ?? null
+  if (payload?.barcode !== undefined) {
+    const cleanBar = payload.barcode != null ? String(payload.barcode).trim() : ''
+    barcode = cleanBar || null
+  }
+  if (
+    barcode &&
+    products.some(
+      (p) =>
+        p.id !== productId &&
+        p.barcode &&
+        String(p.barcode).trim().toLowerCase() === barcode.toLowerCase()
+    )
+  ) {
+    throw new Error(`El código de barras "${barcode}" ya pertenece a otro producto.`)
+  }
+
+  const unit =
+    payload?.unit !== undefined
+      ? String(payload.unit).trim().toLowerCase()
+      : String(target.unit || 'und').trim().toLowerCase()
+  if (!VALID_PRODUCT_UNITS.has(unit)) {
+    throw new Error('La unidad de medida seleccionada no es válida.')
+  }
+
+  const salePrice =
+    payload?.sale_price !== undefined ? Number(payload.sale_price) : Number(target.sale_price)
+  if (!Number.isFinite(salePrice) || salePrice <= 0) {
+    throw new Error('El precio de venta debe ser mayor a $0.')
+  }
+
+  const unitCost =
+    payload?.unit_cost !== undefined && payload?.unit_cost !== '' && payload?.unit_cost !== null
+      ? Number(payload.unit_cost)
+      : Number(target.unit_cost ?? 0)
+  if (!Number.isFinite(unitCost) || unitCost < 0) {
+    throw new Error('El costo unitario no puede ser negativo.')
+  }
+
+  const minStock =
+    payload?.min_stock !== undefined && payload?.min_stock !== '' && payload?.min_stock !== null
+      ? Number(payload.min_stock)
+      : Number(target.min_stock ?? 5)
+  if (!Number.isFinite(minStock) || minStock < 0) {
+    throw new Error('La alerta de stock mínimo no puede ser negativa.')
+  }
+
+  let categoryId = target.category_id ?? null
+  if (payload?.category_id !== undefined) {
+    categoryId =
+      payload.category_id !== null && String(payload.category_id).trim() !== ''
+        ? String(payload.category_id).trim()
+        : null
+  }
+  const matchedCategory = categoryId
+    ? categories.find((c) => String(c.id) === categoryId)
+    : null
+
+  const colorTag =
+    payload?.color_tag !== undefined && PRODUCT_COLOR_PALETTE.some((c) => c.id === payload.color_tag)
+      ? payload.color_tag
+      : target.color_tag || 'slate'
+
+  const description =
+    payload?.description !== undefined
+      ? String(payload.description || '').trim()
+      : target.description || ''
+
+  const imageUrl =
+    payload?.image_url !== undefined
+      ? payload.image_url
+        ? String(payload.image_url).trim()
+        : null
+      : target.image_url ?? null
+
+  const isActive =
+    payload?.is_active !== undefined ? Boolean(payload.is_active) : Boolean(target.is_active)
+
+  // Preserva id y created_at sin alterar ventas históricas (snapshot inmutable) ni lotes asociados (FK product_id)
   const updated = {
     ...target,
-    ...payload,
+    id: target.id,
+    created_at: target.created_at,
+    name,
+    sku,
+    barcode,
+    description,
+    category_id: categoryId,
+    category_name: matchedCategory ? matchedCategory.name : 'Sin categoría',
+    unit,
+    sale_price: Number(salePrice.toFixed(2)),
+    unit_cost: Number(unitCost.toFixed(2)),
+    min_stock: Number(minStock.toFixed(3)),
+    color_tag: colorTag,
+    image_url: imageUrl,
+    is_active: isActive,
     updated_at: new Date().toISOString(),
   }
+
   await putInStore('products', updated)
   return updated
 }
 
 export async function createLotLocal(payload, currentUser) {
-  const products = await getAllFromStore('products')
-  const prod = products.find((p) => p.id === payload.product_id)
+  const actor = assertOwnerAccess(currentUser, 'registrar lotes de inventario')
+
+  const [products, existingLots] = await Promise.all([
+    getAllFromStore('products'),
+    getAllFromStore('lots'),
+  ])
+  const prod = products.find((p) => p.id === payload?.product_id)
   if (!prod) throw new Error('Producto no encontrado para asignar lote.')
 
   const nowISO = new Date().toISOString()
-  const qty = Number(payload.quantity)
+  const qty = Number(payload?.quantity)
   if (!Number.isFinite(qty) || qty <= 0) {
     throw new Error('La cantidad del lote debe ser mayor a cero.')
   }
 
+  const lotNumber = String(payload?.lot_number || `L-${Date.now()}`)
+    .trim()
+    .toUpperCase()
+  if (!lotNumber) {
+    throw new Error('El código de lote es obligatorio.')
+  }
+  if (
+    existingLots.some(
+      (l) =>
+        l.product_id === prod.id &&
+        String(l.lot_number || '').trim().toUpperCase() === lotNumber
+    )
+  ) {
+    throw new Error(`El lote "${lotNumber}" ya existe para "${prod.name}". Usa otro código de lote.`)
+  }
+
+  const unitCost =
+    payload?.unit_cost !== undefined && payload?.unit_cost !== '' && payload?.unit_cost !== null
+      ? Number(payload.unit_cost)
+      : Number(prod.unit_cost || 0)
+  if (!Number.isFinite(unitCost) || unitCost < 0) {
+    throw new Error('El costo unitario del lote no puede ser negativo.')
+  }
+
+  const entryDate = String(payload?.entry_date || getTodayISO()).trim().slice(0, 10)
+  if (!isValidISODate(entryDate)) {
+    throw new Error('La fecha de ingreso del lote no es válida.')
+  }
+  const expirationDate = payload?.expiration_date
+    ? String(payload.expiration_date).trim().slice(0, 10)
+    : null
+  if (expirationDate && !isValidISODate(expirationDate)) {
+    throw new Error('La fecha de vencimiento del lote no es válida.')
+  }
+
+  const cleanQty = Number(qty.toFixed(3))
   const lot = {
     id: `lot-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     product_id: prod.id,
-    lot_number: String(payload.lot_number || `L-${Date.now()}`).trim(),
-    initial_quantity: qty,
-    available_quantity: qty,
-    unit_cost: Number(payload.unit_cost || prod.unit_cost || 0),
-    entry_date: payload.entry_date || getTodayISO(),
-    expiration_date: payload.expiration_date || null,
-    notes: payload.notes || '',
+    lot_number: lotNumber,
+    initial_quantity: cleanQty,
+    available_quantity: cleanQty,
+    unit_cost: Number(unitCost.toFixed(2)),
+    entry_date: entryDate,
+    expiration_date: expirationDate,
+    notes: String(payload?.notes || '').trim(),
     created_at: nowISO,
   }
 
@@ -891,77 +1317,142 @@ export async function createLotLocal(payload, currentUser) {
     lot_id: lot.id,
     lot_number: lot.lot_number,
     movement_type: 'ENTRADA',
-    quantity: qty,
+    quantity: cleanQty,
     previous_stock: 0,
-    new_stock: qty,
-    reason: payload.notes || 'Ingreso de nuevo lote de inventario',
-    user_name: currentUser?.full_name || 'Dueño',
+    new_stock: cleanQty,
+    reason: lot.notes || 'Ingreso de nuevo lote de inventario',
+    user_name: actor.full_name || 'Dueño',
     created_at: nowISO,
   }
 
-  await putInStore('lots', lot)
-  await putInStore('movements', movement)
+  const db = await openLocalDB()
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(['lots', 'movements'], 'readwrite')
+    tx.objectStore('lots').put(lot)
+    tx.objectStore('movements').put(movement)
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+    tx.onabort = () => reject(tx.error || new Error('No se pudo guardar el lote.'))
+  })
+
   return lot
 }
 
 export async function adjustLotLocal(lotId, payload, currentUser) {
+  const actor = assertOwnerAccess(currentUser, 'ajustar lotes de inventario')
+
   const [lots, products] = await Promise.all([
     getAllFromStore('lots'),
     getAllFromStore('products'),
   ])
-  const lot = lots.find((l) => l.id === lotId)
-  if (!lot) throw new Error('Lote no encontrado.')
-  const prod = products.find((p) => p.id === lot.product_id) || {}
+  const existingLot = lots.find((l) => l.id === lotId)
+  if (!existingLot) throw new Error('Lote no encontrado.')
+  const prod = products.find((p) => p.id === existingLot.product_id) || {}
 
-  const prev = Number(lot.available_quantity || 0)
-  const q = Number(payload.quantity || 0)
-  let next = prev
-
-  if (payload.operation === 'ENTRADA_AJUSTE') {
-    next = Number((prev + q).toFixed(3))
-  } else if (payload.operation === 'SALIDA_MERMA') {
-    if (q > prev) throw new Error('La salida supera el saldo disponible del lote.')
-    next = Number((prev - q).toFixed(3))
-  } else if (payload.operation === 'AJUSTE_DIRECTO') {
-    next = Number(q.toFixed(3))
+  const operation = String(payload?.operation || 'AJUSTE_DIRECTO').trim().toUpperCase()
+  const reason = String(payload?.reason || '').trim()
+  if (reason.length < 3) {
+    throw new Error('Debes indicar un motivo claro (mínimo 3 caracteres) para el movimiento.')
   }
 
-  lot.available_quantity = next
-  if (payload.unit_cost !== undefined) lot.unit_cost = Number(payload.unit_cost)
-  if (payload.expiration_date !== undefined) lot.expiration_date = payload.expiration_date || null
+  const prev = Number(existingLot.available_quantity || 0)
+  const q = Number(payload?.quantity)
+  if (!Number.isFinite(q)) {
+    throw new Error('La cantidad ingresada no es válida.')
+  }
+
+  let next = prev
+  if (operation === 'ENTRADA_AJUSTE') {
+    if (q <= 0) throw new Error('La cantidad de entrada debe ser mayor a cero.')
+    next = Number((prev + q).toFixed(3))
+  } else if (operation === 'SALIDA_MERMA') {
+    if (q <= 0) throw new Error('La cantidad de salida debe ser mayor a cero.')
+    if (q > prev + 1e-6) {
+      throw new Error(`La salida (${q}) supera el saldo disponible del lote (${prev}).`)
+    }
+    next = Number(Math.max(0, prev - q).toFixed(3))
+  } else if (operation === 'AJUSTE_DIRECTO') {
+    if (q < 0) throw new Error('El saldo físico del lote no puede ser negativo.')
+    next = Number(q.toFixed(3))
+  } else {
+    throw new Error('Tipo de operación de inventario no válido.')
+  }
+
+  const unitCost =
+    payload?.unit_cost !== undefined && payload?.unit_cost !== '' && payload?.unit_cost !== null
+      ? Number(payload.unit_cost)
+      : Number(existingLot.unit_cost || 0)
+  if (!Number.isFinite(unitCost) || unitCost < 0) {
+    throw new Error('El costo unitario no puede ser negativo.')
+  }
+
+  let expirationDate = existingLot.expiration_date ?? null
+  if (payload?.expiration_date !== undefined) {
+    expirationDate = payload.expiration_date
+      ? String(payload.expiration_date).trim().slice(0, 10)
+      : null
+    if (expirationDate && !isValidISODate(expirationDate)) {
+      throw new Error('La fecha de vencimiento del lote no es válida.')
+    }
+  }
+
+  const nowISO = new Date().toISOString()
+  const updatedLot = {
+    ...existingLot,
+    available_quantity: next,
+    unit_cost: Number(unitCost.toFixed(2)),
+    expiration_date: expirationDate,
+    updated_at: nowISO,
+  }
 
   const delta = Number((next - prev).toFixed(3))
   const movement = {
     id: `mov-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    product_id: lot.product_id,
+    product_id: updatedLot.product_id,
     product_name: prod.name || 'Producto',
     product_sku: prod.sku || '—',
     product_unit: prod.unit || 'und',
-    lot_id: lot.id,
-    lot_number: lot.lot_number,
-    movement_type: payload.operation || 'AJUSTE',
+    lot_id: updatedLot.id,
+    lot_number: updatedLot.lot_number,
+    movement_type: operation,
     quantity: delta,
     previous_stock: prev,
     new_stock: next,
-    reason: payload.reason || 'Ajuste manual de lote',
-    user_name: currentUser?.full_name || 'Dueño',
-    created_at: new Date().toISOString(),
+    reason,
+    user_name: actor.full_name || 'Dueño',
+    created_at: nowISO,
   }
 
-  await putInStore('lots', lot)
-  await putInStore('movements', movement)
-  return lot
+  const db = await openLocalDB()
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(['lots', 'movements'], 'readwrite')
+    tx.objectStore('lots').put(updatedLot)
+    tx.objectStore('movements').put(movement)
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+    tx.onabort = () => reject(tx.error || new Error('No se pudo registrar el movimiento del lote.'))
+  })
+
+  return updatedLot
 }
 
-export async function getFilteredSalesLocal(filters = {}) {
+export async function getFilteredSalesLocal(filters = {}, currentUser = null) {
+  const actor = currentUser || getActiveSessionSync()
+  if (!actor) {
+    throw new Error('Debes iniciar sesión para consultar ventas.')
+  }
+
   const sales = await getAllFromStore('sales')
   const sorted = sales.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
+
+  // Un Tendero únicamente puede consultar sus propias ventas operativas
+  const effectiveUserId = actor.role === 'dueno' ? filters.user_id || '' : actor.id
 
   const filtered = sorted.filter((s) => {
     const sDate = s.date_iso || String(s.created_at).slice(0, 10)
     if (filters.date_from && sDate < filters.date_from) return false
     if (filters.date_to && sDate > filters.date_to) return false
-    if (filters.user_id && s.seller_id !== filters.user_id) return false
+    if (effectiveUserId && s.seller_id !== effectiveUserId) return false
     if (filters.payment_method && s.payment_method !== filters.payment_method) return false
     if (filters.product_id) {
       const hasProd = (s.items || []).some((i) => i.product_id === filters.product_id)
@@ -987,7 +1478,13 @@ export async function getFilteredSalesLocal(filters = {}) {
   }
 }
 
-export async function getUsersLocal() {
+export async function findQuickLoginOwnerLocal() {
+  const users = await getAllFromStore('users')
+  return users.find((u) => u.role === 'dueno' && u.is_active) || null
+}
+
+export async function getUsersLocal(currentUser) {
+  assertOwnerAccess(currentUser, 'consultar los usuarios del sistema')
   const [users, sales] = await Promise.all([
     getAllFromStore('users'),
     getAllFromStore('sales'),
@@ -998,21 +1495,33 @@ export async function getUsersLocal() {
   }))
 }
 
-export async function createUserLocal(payload) {
+export async function createUserLocal(payload, currentUser) {
+  assertOwnerAccess(currentUser, 'crear usuarios')
   const users = await getAllFromStore('users')
-  const username = String(payload.username || '').trim().toLowerCase()
-  if (users.some((u) => u.username === username)) {
+  const username = String(payload?.username || '').trim().toLowerCase()
+  const fullName = String(payload?.full_name || '').trim()
+  const password = String(payload?.password || '')
+  if (username.length < 3 || /\s/.test(username)) {
+    throw new Error('El nombre de usuario debe tener al menos 3 caracteres sin espacios.')
+  }
+  if (fullName.length < 2) {
+    throw new Error('El nombre completo es obligatorio.')
+  }
+  if (password.length < 8) {
+    throw new Error('La contraseña debe tener mínimo 8 caracteres.')
+  }
+  if (users.some((u) => String(u.username || '').toLowerCase() === username)) {
     throw new Error(`El usuario @${username} ya existe.`)
   }
-  const role = payload.role === 'dueno' ? 'dueno' : 'tendero'
+  const role = payload?.role === 'dueno' ? 'dueno' : 'tendero'
   const newUser = {
     id: `usr-${Date.now()}`,
     username,
-    full_name: String(payload.full_name || '').trim(),
-    document_id: String(payload.document_id || '').trim(),
+    full_name: fullName,
+    document_id: String(payload?.document_id || '').trim(),
     role,
     role_name: role === 'dueno' ? 'Dueño' : 'Tendero',
-    password: String(payload.password || 'Tendero2026!'),
+    password,
     is_active: true,
     created_at: new Date().toISOString(),
   }
@@ -1020,18 +1529,38 @@ export async function createUserLocal(payload) {
   return newUser
 }
 
-export async function updateUserLocal(userId, payload) {
+export async function updateUserLocal(userId, payload, currentUser) {
+  assertOwnerAccess(currentUser, 'editar usuarios')
   const users = await getAllFromStore('users')
   const target = users.find((u) => u.id === userId)
   if (!target) throw new Error('Usuario no encontrado.')
 
-  if (payload.full_name) target.full_name = String(payload.full_name).trim()
-  if (payload.role) {
-    target.role = payload.role
-    target.role_name = payload.role === 'dueno' ? 'Dueño' : 'Tendero'
+  const nextRole = payload?.role ? (payload.role === 'dueno' ? 'dueno' : 'tendero') : target.role
+  const nextActive = payload?.is_active !== undefined ? Boolean(payload.is_active) : Boolean(target.is_active)
+
+  if (target.role === 'dueno' && (!nextActive || nextRole !== 'dueno')) {
+    const otherActiveOwners = users.filter(
+      (u) => u.id !== userId && u.role === 'dueno' && u.is_active
+    )
+    if (otherActiveOwners.length === 0) {
+      throw new Error('No puedes desactivar ni degradar al único Dueño activo del sistema.')
+    }
   }
-  if (payload.is_active !== undefined) target.is_active = Boolean(payload.is_active)
-  if (payload.password) target.password = String(payload.password)
+
+  if (payload?.full_name !== undefined) {
+    const cleanName = String(payload.full_name).trim()
+    if (cleanName.length < 2) throw new Error('El nombre completo es obligatorio.')
+    target.full_name = cleanName
+  }
+  target.role = nextRole
+  target.role_name = nextRole === 'dueno' ? 'Dueño' : 'Tendero'
+  target.is_active = nextActive
+  if (payload?.password) {
+    if (String(payload.password).length < 8) {
+      throw new Error('La nueva contraseña debe tener mínimo 8 caracteres.')
+    }
+    target.password = String(payload.password)
+  }
 
   await putInStore('users', target)
   return target

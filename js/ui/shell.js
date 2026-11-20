@@ -11,6 +11,7 @@ import {
 } from '../core/localStore.js'
 import { formatCOP } from '../utils/money.js'
 import { BRAND_LOGO_SVG, icon } from './icons.js'
+import { closeDialog } from './dialog.js'
 import { renderAuthScreen } from './login.js'
 import {
   renderPOSViewHTML,
@@ -113,7 +114,7 @@ function renderOwnerQuickMetricsStrip(st) {
             ${metrics.low_stock_count} productos
           </strong>
           <span class="kpi-sub">
-            ${metrics.out_of_stock_count} agotados · ${(st.products || []).length} activos en catálogo
+            ${metrics.out_of_stock_count} agotados · ${(st.products || []).length} en catálogo
           </span>
         </div>
       </div>
@@ -169,10 +170,11 @@ export function renderAppShell(root, { onAuthenticated, onLogout, refreshAll }) 
   }
 
   const navItems = owner ? OWNER_NAV_ITEMS : TENDERO_NAV_ITEMS
+  const activeNavMeta = navItems.find((item) => item.id === activeRoute) || navItems[0]
 
   root.innerHTML = `
     <div class="app-frame ${owner ? 'layout-owner-pc' : 'layout-tendero-mobile'}">
-      <!-- Menú Lateral (Sidebar) para Versión PC (Dueño) -->
+      <!-- Menú Lateral (Sidebar) para Versión PC -->
       <aside class="app-sidebar" aria-label="Menú lateral de navegación">
         <div class="sidebar-top">
           <a href="#/pos" class="sidebar-brand" aria-label="TiendApp Inicio">
@@ -192,6 +194,7 @@ export function renderAppShell(root, { onAuthenticated, onLogout, refreshAll }) 
                 type="button"
                 class="sidebar-nav-item nav-item ${activeRoute === item.id ? 'active' : ''}"
                 data-nav-route="${item.id}"
+                aria-current="${activeRoute === item.id ? 'page' : 'false'}"
               >
                 ${icon(item.iconName, 16)}
                 <span>${item.label}</span>
@@ -228,30 +231,79 @@ export function renderAppShell(root, { onAuthenticated, onLogout, refreshAll }) 
         </div>
       </aside>
 
-      <!-- Columna Principal de Contenido -->
-      <div class="app-content-column">
-        <!-- Cabecera Compacta Superior -->
-        <header class="app-header">
-          <div class="header-left">
-            <a href="#/pos" class="header-brand mobile-only-brand" aria-label="TiendApp">
-              ${BRAND_LOGO_SVG}
-            </a>
-            <nav class="app-nav" aria-label="Navegación rápida">
+      ${
+        owner && st.mobileMenuOpen
+          ? `
+        <div class="mobile-drawer-backdrop" id="mobile-drawer-backdrop">
+          <aside class="mobile-owner-drawer" id="mobile-owner-drawer" role="dialog" aria-modal="true" aria-label="Menú administrativo">
+            <div class="mobile-drawer-head">
+              <div>
+                <strong>${escapeHTML(store?.store_name || 'Mi Tienda')}</strong>
+                <div class="cell-sub">${escapeHTML(st.user.full_name)} · ${escapeHTML(st.user.role_name)}</div>
+              </div>
+              <button type="button" class="btn-icon" id="btn-close-mobile-drawer" aria-label="Cerrar menú">
+                ${icon('close', 16)}
+              </button>
+            </div>
+            <nav class="sidebar-nav" aria-label="Módulos del dueño">
               ${navItems
                 .map(
                   (item) => `
                   <button
                     type="button"
-                    class="nav-item ${activeRoute === item.id ? 'active' : ''}"
+                    class="sidebar-nav-item nav-item ${activeRoute === item.id ? 'active' : ''}"
                     data-nav-route="${item.id}"
                   >
-                    ${icon(item.iconName, 15)}
+                    ${icon(item.iconName, 16)}
                     <span>${item.label}</span>
                   </button>
                 `
                 )
                 .join('')}
             </nav>
+            <div class="mobile-drawer-footer">
+              <button type="button" class="btn btn-outline btn-sm btn-block" id="btn-drawer-cam50">
+                ${icon('barcode', 15)}
+                <span>${ui.inlineMobileScanner ? 'Desactivar Cámara 50%' : 'Activar Cámara 50% en POS'}</span>
+              </button>
+              <button type="button" class="btn btn-ghost btn-sm btn-block" id="btn-drawer-logout">
+                ${icon('logout', 15)}
+                <span>Cerrar sesión</span>
+              </button>
+            </div>
+          </aside>
+        </div>
+      `
+          : ''
+      }
+
+      <!-- Columna Principal de Contenido -->
+      <div class="app-content-column">
+        <!-- Cabecera Compacta Superior -->
+        <header class="app-header">
+          <div class="header-left">
+            ${
+              owner
+                ? `
+              <button
+                type="button"
+                class="btn-icon mobile-only-menu-btn"
+                id="btn-header-mobile-menu"
+                aria-label="Abrir menú de navegación"
+              >
+                ${icon('menu', 18)}
+              </button>
+            `
+                : ''
+            }
+            <a href="#/pos" class="header-brand mobile-only-brand" aria-label="TiendApp">
+              ${BRAND_LOGO_SVG}
+            </a>
+            <div class="desktop-route-crumb">
+              ${icon(activeNavMeta.iconName, 15)}
+              <span>${escapeHTML(activeNavMeta.label)}</span>
+              ${activeRoute === 'pos' ? '<kbd class="kbd-hint">/</kbd><span class="crumb-hint">Buscar</span><kbd class="kbd-hint">F2</kbd><span class="crumb-hint">Cobrar</span>' : ''}
+            </div>
           </div>
 
           <div class="header-right">
@@ -284,7 +336,7 @@ export function renderAppShell(root, { onAuthenticated, onLogout, refreshAll }) 
         ${
           st.toast
             ? `
-          <div class="toast-notification toast-${st.toast.type}" role="status">
+          <div class="toast-notification toast-${st.toast.type}" role="status" aria-live="polite">
             <span>${escapeHTML(st.toast.message)}</span>
             <button type="button" class="btn-icon btn-icon-subtle" id="btn-close-toast" aria-label="Cerrar notificación">
               ${icon('close', 14)}
@@ -299,7 +351,7 @@ export function renderAppShell(root, { onAuthenticated, onLogout, refreshAll }) 
         </main>
       </div>
 
-      <!-- Barra de Navegación Inferior (Bottom Navigation Bar) para Versión Celular (Tendero/POS) -->
+      <!-- Barra de Navegación Inferior (Bottom Navigation Bar) para Versión Celular -->
       <nav class="app-bottom-nav" aria-label="Navegación móvil para el pulgar">
         <button
           type="button"
@@ -307,34 +359,7 @@ export function renderAppShell(root, { onAuthenticated, onLogout, refreshAll }) 
           data-nav-route="pos"
         >
           ${icon('pos', 18)}
-          <span>Caja POS</span>
-        </button>
-
-        <button
-          type="button"
-          class="bottom-nav-btn ${ui.inlineMobileScanner ? 'active' : ''}"
-          id="btn-bottom-cam50"
-        >
-          ${icon('barcode', 18)}
-          <span>Cámara 50%</span>
-        </button>
-
-        <button
-          type="button"
-          class="bottom-nav-thumb-pay ${itemsCount > 0 ? 'has-items' : ''}"
-          id="btn-open-mobile-ticket"
-        >
-          ${icon('cart', 18)}
-          <span>Cobrar (${itemsCount}) · ${formatCOP(total)}</span>
-        </button>
-
-        <button
-          type="button"
-          class="bottom-nav-btn ${activeRoute === 'reviews' ? 'active' : ''}"
-          data-nav-route="reviews"
-        >
-          ${icon('star', 18)}
-          <span>Reseñas</span>
+          <span>POS</span>
         </button>
 
         ${
@@ -342,14 +367,63 @@ export function renderAppShell(root, { onAuthenticated, onLogout, refreshAll }) 
             ? `
           <button
             type="button"
-            class="bottom-nav-btn ${activeRoute === 'settings' ? 'active' : ''}"
-            data-nav-route="settings"
+            class="bottom-nav-btn ${activeRoute === 'products' ? 'active' : ''}"
+            data-nav-route="products"
           >
-            ${icon('settings', 18)}
-            <span>Ajustes</span>
+            ${icon('products', 18)}
+            <span>Productos</span>
           </button>
         `
             : `
+          <button
+            type="button"
+            class="bottom-nav-btn ${ui.inlineMobileScanner ? 'active' : ''}"
+            id="btn-bottom-cam50"
+          >
+            ${icon('barcode', 18)}
+            <span>Cámara</span>
+          </button>
+        `
+        }
+
+        <button
+          type="button"
+          class="bottom-nav-thumb-pay ${itemsCount > 0 ? 'has-items' : ''}"
+          id="btn-open-mobile-ticket"
+        >
+          ${icon('cart', 17)}
+          <span>${itemsCount > 0 ? `${itemsCount} · ${formatCOP(total)}` : 'Ticket ($0)'}</span>
+        </button>
+
+        ${
+          owner
+            ? `
+          <button
+            type="button"
+            class="bottom-nav-btn ${activeRoute === 'lots' ? 'active' : ''}"
+            data-nav-route="lots"
+          >
+            ${icon('lots', 18)}
+            <span>Lotes</span>
+          </button>
+          <button
+            type="button"
+            class="bottom-nav-btn ${st.mobileMenuOpen ? 'active' : ''}"
+            id="btn-bottom-more-menu"
+          >
+            ${icon('menu', 18)}
+            <span>Más</span>
+          </button>
+        `
+            : `
+          <button
+            type="button"
+            class="bottom-nav-btn ${activeRoute === 'reviews' ? 'active' : ''}"
+            data-nav-route="reviews"
+          >
+            ${icon('star', 18)}
+            <span>Reseñas</span>
+          </button>
           <button type="button" class="bottom-nav-btn" id="btn-bottom-logout">
             ${icon('logout', 18)}
             <span>Salir</span>
@@ -362,21 +436,39 @@ export function renderAppShell(root, { onAuthenticated, onLogout, refreshAll }) 
 
   root.querySelectorAll('[data-nav-route]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      setState({ mobileTicketOpen: false }, false)
+      setState({ mobileTicketOpen: false, mobileMenuOpen: false }, false)
       navigateTo(btn.getAttribute('data-nav-route'))
     })
   })
 
-  root.querySelector('#btn-bottom-cam50')?.addEventListener('click', async () => {
+  const toggleMobileDrawer = () => {
+    setState({ mobileMenuOpen: !getState().mobileMenuOpen, mobileTicketOpen: false })
+  }
+  root.querySelector('#btn-header-mobile-menu')?.addEventListener('click', toggleMobileDrawer)
+  root.querySelector('#btn-bottom-more-menu')?.addEventListener('click', toggleMobileDrawer)
+  root.querySelector('#btn-close-mobile-drawer')?.addEventListener('click', () => {
+    setState({ mobileMenuOpen: false })
+  })
+  root.querySelector('#mobile-drawer-backdrop')?.addEventListener('click', (e) => {
+    if (e.target.id === 'mobile-drawer-backdrop') {
+      setState({ mobileMenuOpen: false })
+    }
+  })
+
+  const handleToggleCam50 = async () => {
     const cur = getUISettingsSync()
     const next = !cur.inlineMobileScanner
     if (!next) await stopInline50vhScanner()
     saveUISettingsSync({ inlineMobileScanner: next })
+    setState({ mobileMenuOpen: false, mobileTicketOpen: false }, false)
     if (st.route !== 'pos') navigateTo('pos')
-    else setState({ mobileTicketOpen: false })
-  })
+    else setState({})
+  }
+  root.querySelector('#btn-bottom-cam50')?.addEventListener('click', handleToggleCam50)
+  root.querySelector('#btn-drawer-cam50')?.addEventListener('click', handleToggleCam50)
 
   root.querySelector('#btn-open-mobile-ticket')?.addEventListener('click', () => {
+    setState({ mobileMenuOpen: false }, false)
     if (st.route !== 'pos') {
       navigateTo('pos')
       setState({ mobileTicketOpen: true })
@@ -406,6 +498,7 @@ export function renderAppShell(root, { onAuthenticated, onLogout, refreshAll }) 
   root.querySelector('#btn-header-logout')?.addEventListener('click', handleDoLogout)
   root.querySelector('#btn-sidebar-logout')?.addEventListener('click', handleDoLogout)
   root.querySelector('#btn-bottom-logout')?.addEventListener('click', handleDoLogout)
+  root.querySelector('#btn-drawer-logout')?.addEventListener('click', handleDoLogout)
 
   root.querySelector('#btn-close-toast')?.addEventListener('click', () => {
     setState({ toast: null })
@@ -441,16 +534,31 @@ export function bindKeyboardShortcuts(refreshAll) {
     const st = getState()
     if (!st.user) return
 
+    const activeTag = document.activeElement?.tagName?.toLowerCase() || ''
+    const isTyping = activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select'
+
     if (e.key === 'F2') {
       const onPos = !isOwner(st.user) || (st.route || 'pos') === 'pos'
-      if (onPos && st.cart.length > 0) {
+      if (onPos && st.cart.length > 0 && !document.querySelector('.dialog-backdrop')) {
         e.preventDefault()
         submitCurrentSale(refreshAll)
       }
+    } else if ((e.key === '/' && !isTyping) || e.key === 'F3') {
+      const searchEl =
+        document.querySelector('#pos-search-input') ||
+        document.querySelector('#prod-search-input')
+      if (searchEl && !document.querySelector('.dialog-backdrop')) {
+        e.preventDefault()
+        searchEl.focus()
+        searchEl.select?.()
+      }
     } else if (e.key === 'Escape') {
-      const dialog = document.querySelector('.dialog-backdrop')
-      if (dialog) {
-        dialog.remove()
+      if (document.querySelector('.dialog-backdrop')) {
+        closeDialog()
+      } else if (st.mobileMenuOpen) {
+        setState({ mobileMenuOpen: false })
+      } else if (st.mobileTicketOpen) {
+        setState({ mobileTicketOpen: false })
       }
     }
   })

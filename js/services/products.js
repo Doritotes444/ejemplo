@@ -12,7 +12,7 @@ export async function fetchCategories() {
 }
 
 export async function createCategoryRequest(payload) {
-  return createOrUpdateCategoryLocal(payload)
+  return createOrUpdateCategoryLocal(payload, getState().user)
 }
 
 export async function fetchProducts() {
@@ -26,5 +26,5 @@ export async function createProductRequest(payload) {
 }
 
 export async function updateProductRequest(productId, payload) {
-  return updateProductLocal(productId, payload)
+  return updateProductLocal(productId, payload, getState().user)
 }

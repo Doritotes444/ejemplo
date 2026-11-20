@@ -7,6 +7,7 @@ import {
   calculateCartTotals,
   showToast,
 } from '../state.js'
+import { isOwner } from '../core/permissions.js'
 import { registerSaleRequest, generateClientOpId, fetchSales } from '../services/sales.js'
 import {
   getUISettingsSync,
@@ -14,7 +15,7 @@ import {
   buildAestheticFallbackSVG,
 } from '../core/localStore.js'
 import { formatCOP, BILLETES_RAPIDOS, calculateChange } from '../utils/money.js'
-import { isBulkUnit, formatQty } from '../utils/quantities.js'
+import { isBulkUnit, getUnitStep, formatQty } from '../utils/quantities.js'
 import { icon } from './icons.js'
 import { openSaleReceiptModal } from './receipt.js'
 import { openDialog } from './dialog.js'
@@ -73,6 +74,7 @@ export async function stopInline50vhScanner() {
 
 export function renderPOSViewHTML(st) {
   const ui = getUISettingsSync()
+  const owner = isOwner(st.user)
   const allFiltered = getFilteredPOSProducts(st)
   const limit = st.posSearch ? 120 : st.posVisibleLimit || 60
   const visibleProducts = allFiltered.slice(0, limit)
@@ -93,22 +95,30 @@ export function renderPOSViewHTML(st) {
   const isStoreBlank = (st.products || []).length === 0
 
   const rowsHTML = isStoreBlank
-    ? `
-      <div class="empty-state blank-store-cta">
-        <div class="blank-store-icon">${icon('products', 28)}</div>
-        <h3 class="empty-title">Tu tienda está lista y en blanco (Cero datos ficticios)</h3>
-        <p class="empty-subtitle">Comienza el Paso 1 del tutorial registrando tu primer producto real para habilitar las ventas en el POS.</p>
-        <button type="button" class="btn btn-primary btn-lg" id="btn-empty-pos-create-first">
-          ${icon('plus', 16)}
-          <span>Crear Mi Primer Producto (Paso 1)</span>
-        </button>
-      </div>
-    `
+    ? owner
+      ? `
+        <div class="empty-state blank-store-cta">
+          <div class="blank-store-icon">${icon('products', 28)}</div>
+          <h3 class="empty-title">Tu tienda está lista y en blanco (Cero datos ficticios)</h3>
+          <p class="empty-subtitle">Comienza el Paso 1 del tutorial registrando tu primer producto real para habilitar las ventas en el POS.</p>
+          <button type="button" class="btn btn-primary btn-lg" id="btn-empty-pos-create-first">
+            ${icon('plus', 16)}
+            <span>Crear Mi Primer Producto (Paso 1)</span>
+          </button>
+        </div>
+      `
+      : `
+        <div class="empty-state blank-store-cta">
+          <div class="blank-store-icon">${icon('products', 28)}</div>
+          <h3 class="empty-title">Sin productos disponibles en caja</h3>
+          <p class="empty-subtitle">El catálogo todavía está vacío. Solicita al Dueño que registre los productos e ingrese los lotes iniciales para empezar a vender.</p>
+        </div>
+      `
     : visibleProducts.length === 0
     ? `
       <div class="empty-state">
         <p class="empty-title">No hay productos disponibles para este criterio</p>
-        <p class="empty-subtitle">Ajusta el término de búsqueda o escanea un código de barras válido.</p>
+        <p class="empty-subtitle">Ajusta el término de búsqueda, cambia la categoría o escanea un código de barras válido.</p>
       </div>
     `
     : `
@@ -127,7 +137,8 @@ export function renderPOSViewHTML(st) {
               stockBadge = `<span class="status-badge badge-warning">${formatQty(avail, p.unit)}</span>`
             }
 
-            const imgSrc = p.image_url || buildAestheticFallbackSVG(p.name, p.sku)
+            const imgSrc =
+              p.image_url || buildAestheticFallbackSVG(p.name, p.sku, p.color_tag || 'slate')
 
             return `
               <button
@@ -145,6 +156,8 @@ export function renderPOSViewHTML(st) {
                         src="${escapeHTML(imgSrc)}"
                         alt="${escapeHTML(p.name)}"
                         class="tile-thumb-img"
+                        data-sku="${escapeHTML(p.sku)}"
+                        data-color="${escapeHTML(p.color_tag || 'slate')}"
                         loading="lazy"
                         onerror="window.handleProductImageError && window.handleProductImageError(this)"
                       />
@@ -158,7 +171,7 @@ export function renderPOSViewHTML(st) {
                       ${stockBadge}
                     </div>
                     <div class="tile-name">${escapeHTML(p.name)}</div>
-                    <div class="tile-barcode-sub">${escapeHTML(p.category_name || '')} · EAN ${escapeHTML(p.barcode || '—')}</div>
+                    <div class="tile-barcode-sub">${escapeHTML(p.category_name || 'Sin categoría')}${p.barcode ? ` · EAN ${escapeHTML(p.barcode)}` : ''}</div>
                   </div>
                 </div>
                 <div class="tile-bottom">
@@ -197,13 +210,13 @@ export function renderPOSViewHTML(st) {
       ? `
         <div class="cart-empty-state">
           <p>Sin artículos en el ticket actual</p>
-          <small>Toca un producto o usa el lector de cámara para agregarlo.</small>
+          <small>Toca un producto, presiona / para buscar o usa el escáner.</small>
         </div>
       `
       : st.cart
           .map((item) => {
             const bulk = isBulkUnit(item.unit)
-            const lineSubtotal = Number(item.unit_price) * Number(item.quantity)
+            const lineSubtotal = Math.round(Number(item.unit_price) * Number(item.quantity))
             return `
               <div class="cart-line">
                 <div class="cart-line-main">
@@ -214,7 +227,7 @@ export function renderPOSViewHTML(st) {
                       <span>·</span>
                       <span>${formatCOP(item.unit_price)} / ${escapeHTML(item.unit)}</span>
                       <span>·</span>
-                      <span>Disp: ${item.available_stock}</span>
+                      <span>Disp: ${formatQty(item.available_stock, item.unit)}</span>
                     </div>
                   </div>
                   <button
@@ -229,20 +242,21 @@ export function renderPOSViewHTML(st) {
 
                 <div class="cart-line-controls">
                   <div class="qty-control-group">
-                    <button type="button" class="qty-btn" data-cart-dec="${item.product_id}" aria-label="Disminuir">
+                    <button type="button" class="qty-btn" data-cart-dec="${item.product_id}" aria-label="Disminuir cantidad">
                       ${icon('minus', 12)}
                     </button>
                     <input
                       type="number"
+                      inputmode="decimal"
                       class="qty-input"
                       step="${bulk ? '0.001' : '1'}"
                       min="${bulk ? '0.001' : '1'}"
                       max="${item.available_stock}"
                       value="${item.quantity}"
                       data-cart-input="${item.product_id}"
-                      aria-label="Cantidad"
+                      aria-label="Cantidad de ${escapeHTML(item.name)}"
                     />
-                    <button type="button" class="qty-btn" data-cart-inc="${item.product_id}" aria-label="Aumentar">
+                    <button type="button" class="qty-btn" data-cart-inc="${item.product_id}" aria-label="Aumentar cantidad">
                       ${icon('plus', 12)}
                     </button>
                   </div>
@@ -456,6 +470,23 @@ export function renderPOSViewHTML(st) {
               : ''
           }
 
+          ${
+            st.cart.length > 0
+              ? `
+                <div class="pos-notes-row">
+                  <input
+                    id="pos-sale-notes"
+                    type="text"
+                    class="pos-notes-input"
+                    value="${escapeHTML(st.saleNotes)}"
+                    placeholder="Nota opcional del comprobante (ej. Cliente, domicilio)..."
+                    aria-label="Observación opcional de la venta"
+                  />
+                </div>
+              `
+              : ''
+          }
+
           <div class="ticket-summary">
             <div class="summary-row">
               <span>Subtotal (${itemsCount} líneas)</span>
@@ -497,12 +528,13 @@ export function bindPOSViewEvents(root, refreshCatalogAndContext) {
   const searchInput = root.querySelector('#pos-search-input')
 
   searchInput?.addEventListener('input', (e) => {
+    const pos = e.target.selectionStart
     setState({ posSearch: e.target.value })
     const nextInput = document.querySelector('#pos-search-input')
     if (nextInput) {
       nextInput.focus()
-      const len = nextInput.value.length
-      nextInput.setSelectionRange(len, len)
+      const caret = pos != null ? pos : nextInput.value.length
+      nextInput.setSelectionRange(caret, caret)
     }
   })
 
@@ -531,6 +563,7 @@ export function bindPOSViewEvents(root, refreshCatalogAndContext) {
       if (!res.ok) {
         showToast('error', res.error)
       } else {
+        currentOperationId = null
         setState({ cart: res.cart, posSearch: '' })
       }
       document.querySelector('#pos-search-input')?.focus()
@@ -538,6 +571,10 @@ export function bindPOSViewEvents(root, refreshCatalogAndContext) {
   })
 
   root.querySelector('#btn-empty-pos-create-first')?.addEventListener('click', () => {
+    if (!isOwner(getState().user)) {
+      showToast('error', 'Solo el Dueño puede crear productos.')
+      return
+    }
     openProductFormModal(null, refreshCatalogAndContext)
   })
 
@@ -627,6 +664,7 @@ export function bindPOSViewEvents(root, refreshCatalogAndContext) {
         showToast('error', res.error)
         return
       }
+      currentOperationId = null
       setState({ cart: res.cart })
     })
   })
@@ -637,8 +675,10 @@ export function bindPOSViewEvents(root, refreshCatalogAndContext) {
       const st = getState()
       const prod = st.products.find((p) => p.id === pid)
       if (!prod) return
-      const res = addProductToCart(st.cart, prod, 1)
+      const step = getUnitStep(prod.unit)
+      const res = addProductToCart(st.cart, prod, step)
       if (!res.ok) showToast('error', res.error)
+      currentOperationId = null
       setState({ cart: res.cart })
     })
   })
@@ -649,8 +689,9 @@ export function bindPOSViewEvents(root, refreshCatalogAndContext) {
       const st = getState()
       const item = st.cart.find((c) => c.product_id === pid)
       if (!item) return
-      const step = isBulkUnit(item.unit) ? 0.25 : 1
+      const step = getUnitStep(item.unit)
       const next = updateCartItemQty(st.cart, pid, item.quantity - step)
+      currentOperationId = null
       setState({ cart: next })
     })
   })
@@ -660,7 +701,15 @@ export function bindPOSViewEvents(root, refreshCatalogAndContext) {
       const pid = input.getAttribute('data-cart-input')
       const st = getState()
       const prod = st.products.find((p) => p.id === pid)
+      const requested = Number(e.target.value)
+      if (prod && Number.isFinite(requested) && requested > Number(prod.available_stock || 0)) {
+        showToast(
+          'error',
+          `Existencia máxima alcanzada para "${prod.name}" (${formatQty(prod.available_stock, prod.unit)}).`
+        )
+      }
       const next = updateCartItemQty(st.cart, pid, e.target.value, prod?.available_stock)
+      currentOperationId = null
       setState({ cart: next })
     })
   })
@@ -668,12 +717,14 @@ export function bindPOSViewEvents(root, refreshCatalogAndContext) {
   root.querySelectorAll('[data-cart-remove]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const pid = btn.getAttribute('data-cart-remove')
+      currentOperationId = null
       setState({ cart: removeCartItem(getState().cart, pid) })
     })
   })
 
   root.querySelector('#btn-pos-clear-cart')?.addEventListener('click', () => {
-    setState({ cart: [], amountReceived: '', transferVerification: null })
+    currentOperationId = null
+    setState({ cart: [], amountReceived: '', saleNotes: '', transferVerification: null })
   })
 
   root.querySelectorAll('[data-pos-pay]').forEach((btn) => {
@@ -699,7 +750,13 @@ export function bindPOSViewEvents(root, refreshCatalogAndContext) {
   root.querySelector('#pos-cash-input')?.addEventListener('input', (e) => {
     setState({ amountReceived: e.target.value })
     const el = document.querySelector('#pos-cash-input')
-    if (el) el.focus()
+    if (el) {
+      el.focus()
+    }
+  })
+
+  root.querySelector('#pos-sale-notes')?.addEventListener('input', (e) => {
+    setState({ saleNotes: e.target.value }, false)
   })
 
   root.querySelector('#btn-pos-submit')?.addEventListener('click', () => {
@@ -771,6 +828,7 @@ export async function submitCurrentSale(refreshCatalogAndContext) {
         st.paymentMethod === 'efectivo' && st.amountReceived !== ''
           ? Number(st.amountReceived)
           : total,
+      notes: st.saleNotes || '',
       transfer_verification: st.transferVerification || null,
       items: st.cart.map((c) => ({
         product_id: c.product_id,
@@ -785,6 +843,7 @@ export async function submitCurrentSale(refreshCatalogAndContext) {
       {
         cart: [],
         amountReceived: '',
+        saleNotes: '',
         transferVerification: null,
         mobileTicketOpen: false,
         lastCompletedSale: sale,

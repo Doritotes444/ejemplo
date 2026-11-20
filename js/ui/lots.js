@@ -8,8 +8,13 @@ import {
 import { createLotRequest, adjustLotRequest } from '../services/lots.js'
 import { createUserRequest, updateUserRequest } from '../services/users.js'
 import { fetchSales } from '../services/sales.js'
+import {
+  PRODUCT_COLOR_PALETTE,
+  buildAestheticFallbackSVG,
+  generateUniqueSKU,
+} from '../core/localStore.js'
 import { formatCOP } from '../utils/money.js'
-import { formatQty } from '../utils/quantities.js'
+import { formatQty, isBulkUnit } from '../utils/quantities.js'
 import { getTodayISO } from '../utils/validation.js'
 import { icon } from './icons.js'
 import { openDialog, closeDialog } from './dialog.js'
@@ -17,11 +22,11 @@ import { openSaleReceiptModal } from './receipt.js'
 
 const UNITS = [
   { code: 'und', label: 'Unidad (und)' },
-  { code: 'kg', label: 'Kilogramo (kg)' },
-  { code: 'lb', label: 'Libra (lb)' },
-  { code: 'lt', label: 'Litro (lt)' },
-  { code: 'gr', label: 'Gramo (gr)' },
-  { code: 'caja', label: 'Caja' },
+  { code: 'kg', label: 'Kilogramo (kg · fraccionable)' },
+  { code: 'lb', label: 'Libra (lb · fraccionable)' },
+  { code: 'lt', label: 'Litro (lt · fraccionable)' },
+  { code: 'gr', label: 'Gramo (gr · fraccionable)' },
+  { code: 'caja', label: 'Caja (entero)' },
 ]
 
 function escapeHTML(str) {
@@ -32,6 +37,70 @@ function escapeHTML(str) {
     .replace(/"/g, '&quot;')
 }
 
+function computeMarginStats(salePrice, unitCost) {
+  const price = Number(salePrice)
+  const cost = Number(unitCost)
+  if (!Number.isFinite(price) || price <= 0) {
+    return { status: 'empty', text: 'Ingresa el precio de venta para calcular margen.' }
+  }
+  if (!Number.isFinite(cost) || cost <= 0) {
+    return {
+      status: 'warn',
+      text: 'Sin costo registrado (opcional, pero recomendado para ver tu ganancia real).',
+    }
+  }
+  const profit = price - cost
+  const pct = Math.round((profit / price) * 100)
+  if (profit < 0) {
+    return {
+      status: 'danger',
+      text: `Margen negativo: pierdes ${formatCOP(Math.abs(profit))} por unidad (${pct}%).`,
+    }
+  }
+  if (profit === 0) {
+    return {
+      status: 'warn',
+      text: 'Precio igual al costo: ganancia $0 (0%).',
+    }
+  }
+  return {
+    status: 'ok',
+    text: `Ganancia estimada: ${formatCOP(profit)} por unidad (${pct}% margen).`,
+  }
+}
+
+function compressImageFileToDataURL(file, maxSize = 240) {
+  return new Promise((resolve, reject) => {
+    if (!file || !file.type.startsWith('image/')) {
+      reject(new Error('Selecciona una imagen válida (JPG, PNG o WebP).'))
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      reject(new Error('La imagen supera los 5 MB. Elige un archivo más liviano.'))
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      const img = new Image()
+      img.onload = () => {
+        const scale = Math.min(1, maxSize / Math.max(img.width, img.height))
+        const w = Math.max(1, Math.round(img.width * scale))
+        const h = Math.max(1, Math.round(img.height * scale))
+        const canvas = document.createElement('canvas')
+        canvas.width = w
+        canvas.height = h
+        const ctx = canvas.getContext('2d')
+        ctx.drawImage(img, 0, 0, w, h)
+        resolve(canvas.toDataURL('image/jpeg', 0.82))
+      }
+      img.onerror = () => reject(new Error('No se pudo procesar la imagen seleccionada.'))
+      img.src = reader.result
+    }
+    reader.onerror = () => reject(new Error('No se pudo leer el archivo seleccionado.'))
+    reader.readAsDataURL(file)
+  })
+}
+
 // =============================================================================
 // 1. GESTIÓN DE PRODUCTOS Y CATEGORÍAS
 // =============================================================================
@@ -39,13 +108,29 @@ function escapeHTML(str) {
 export function renderProductsViewHTML(st) {
   if (!isOwner(st.user)) return ''
 
+  const allProducts = st.products || []
   const q = String(st.productSearch || '').trim().toLowerCase()
   const catFilter = st.productCategoryFilter || 'ALL'
+  const stockFilter = st.productStockFilter || 'ALL'
   const showInactive = Boolean(st.productShowInactive)
 
-  const filtered = (st.products || []).filter((p) => {
+  const lowStockCount = allProducts.filter(
+    (p) => p.is_active && Number(p.available_stock || 0) > 0 && p.is_low_stock
+  ).length
+  const outStockCount = allProducts.filter(
+    (p) => p.is_active && Number(p.available_stock || 0) <= 0
+  ).length
+  const expiringCount = allProducts.filter(
+    (p) => p.is_active && Number(p.expiring_soon_count || 0) > 0
+  ).length
+
+  const filtered = allProducts.filter((p) => {
     if (!showInactive && !p.is_active) return false
-    if (catFilter !== 'ALL' && p.category_id !== catFilter) return false
+    if (catFilter !== 'ALL' && String(p.category_id || '') !== String(catFilter)) return false
+    const avail = Number(p.available_stock || 0)
+    if (stockFilter === 'LOW' && !(avail > 0 && p.is_low_stock)) return false
+    if (stockFilter === 'OUT' && avail > 0) return false
+    if (stockFilter === 'EXPIRING' && !(Number(p.expiring_soon_count || 0) > 0)) return false
     if (!q) return true
     return (
       String(p.name || '').toLowerCase().includes(q) ||
@@ -56,7 +141,10 @@ export function renderProductsViewHTML(st) {
 
   const rowsHTML =
     filtered.length === 0
-      ? `<tr><td colspan="7" class="empty-cell">No hay productos registrados que coincidan con el filtro.</td></tr>`
+      ? `<tr><td colspan="7" class="empty-cell">
+          <p class="empty-title">${allProducts.length === 0 ? 'Aún no tienes productos en el catálogo' : 'No hay productos que coincidan con el filtro'}</p>
+          <p class="empty-subtitle">${allProducts.length === 0 ? 'Usa "+ Nuevo Producto" para registrar tu primer artículo en segundos.' : 'Prueba limpiando el buscador o cambiando el filtro de categoría o stock.'}</p>
+        </td></tr>`
       : filtered
           .map((p) => {
             const avail = Number(p.available_stock || 0)
@@ -67,17 +155,48 @@ export function renderProductsViewHTML(st) {
               stockBadge = `<span class="status-badge badge-warning">Bajo (${formatQty(avail, p.unit)})</span>`
             }
 
+            const imgSrc =
+              p.image_url || buildAestheticFallbackSVG(p.name, p.sku, p.color_tag || 'slate')
+            const hasCost = Number(p.unit_cost || 0) > 0
+            const marginPct =
+              hasCost && Number(p.sale_price) > 0
+                ? Math.round(((Number(p.sale_price) - Number(p.unit_cost)) / Number(p.sale_price)) * 100)
+                : null
+
             return `
               <tr class="${!p.is_active ? 'row-inactive' : ''}">
-                <td class="mono">${escapeHTML(p.sku)}${p.barcode ? `<div class="cell-sub">${escapeHTML(p.barcode)}</div>` : ''}</td>
-                <td>
-                  <strong>${escapeHTML(p.name)}</strong>
+                <td class="mono">
+                  <strong>${escapeHTML(p.sku)}</strong>
+                  ${p.barcode ? `<div class="cell-sub">${escapeHTML(p.barcode)}</div>` : '<div class="cell-sub">Sin EAN</div>'}
                 </td>
-                <td>${escapeHTML(p.category_name)}</td>
-                <td class="num"><strong>${formatCOP(p.sale_price)}</strong> <small class="text-muted">/ ${escapeHTML(p.unit)}</small></td>
+                <td>
+                  <div class="table-prod-cell">
+                    <img
+                      src="${escapeHTML(imgSrc)}"
+                      alt="${escapeHTML(p.name)}"
+                      class="table-prod-thumb"
+                      data-sku="${escapeHTML(p.sku)}"
+                      data-color="${escapeHTML(p.color_tag || 'slate')}"
+                      onerror="window.handleProductImageError && window.handleProductImageError(this)"
+                    />
+                    <div class="table-prod-info">
+                      <strong>${escapeHTML(p.name)}</strong>
+                      ${p.description ? `<div class="cell-sub cell-truncate" title="${escapeHTML(p.description)}">${escapeHTML(p.description)}</div>` : ''}
+                    </div>
+                  </div>
+                </td>
+                <td>${escapeHTML(p.category_name || 'Sin categoría')}</td>
+                <td class="num">
+                  <strong>${formatCOP(p.sale_price)}</strong> <small class="text-muted">/ ${escapeHTML(p.unit)}</small>
+                  ${
+                    hasCost
+                      ? `<div class="cell-sub">Costo ${formatCOP(p.unit_cost)} · <span class="${marginPct < 0 ? 'text-danger' : 'text-success'}">${marginPct}%</span></div>`
+                      : ''
+                  }
+                </td>
                 <td>
                   ${stockBadge}
-                  <div class="cell-sub">Mínimo: ${p.min_stock} ${escapeHTML(p.unit)}</div>
+                  <div class="cell-sub">Mínimo: ${p.min_stock} ${escapeHTML(p.unit)}${p.expiring_soon_count ? ` · <span class="text-warning">${p.expiring_soon_count} lote(s) por vencer</span>` : ''}</div>
                 </td>
                 <td>
                   <span class="status-badge ${p.is_active ? 'badge-neutral' : 'badge-danger'}">
@@ -85,11 +204,14 @@ export function renderProductsViewHTML(st) {
                   </span>
                 </td>
                 <td class="actions-cell">
-                  <button type="button" class="btn btn-outline btn-xs" data-prod-add-lot="${p.id}">
+                  <button type="button" class="btn btn-outline btn-xs" data-prod-add-lot="${p.id}" title="Ingresar lote de mercancía">
                     ${icon('plus', 12)} Lote
                   </button>
-                  <button type="button" class="btn btn-outline btn-xs" data-prod-edit="${p.id}">
+                  <button type="button" class="btn btn-outline btn-xs" data-prod-edit="${p.id}" title="Editar información comercial">
                     ${icon('edit', 12)} Editar
+                  </button>
+                  <button type="button" class="btn btn-ghost btn-xs" data-prod-duplicate="${p.id}" title="Duplicar producto para crear otra presentación">
+                    ${icon('copy', 12)}
                   </button>
                   <button type="button" class="btn btn-ghost btn-xs" data-prod-toggle="${p.id}">
                     ${p.is_active ? 'Desactivar' : 'Activar'}
@@ -105,7 +227,7 @@ export function renderProductsViewHTML(st) {
       <header class="section-header-bar">
         <div>
           <h1 class="page-title">Catálogo de Productos</h1>
-          <p class="page-subtitle">Define códigos SKU, precios de venta, categorías y parámetros de stock mínimo.</p>
+          <p class="page-subtitle">Crea productos rápido con nombre y precio; controla SKU, costos, unidades fraccionables y lotes FEFO.</p>
         </div>
         <div class="header-actions-group">
           <button type="button" class="btn btn-outline" id="btn-new-category">
@@ -129,11 +251,11 @@ export function renderProductsViewHTML(st) {
             placeholder="Filtrar por nombre, SKU o código de barras..."
           />
         </div>
-        <select id="prod-cat-select" class="select-compact">
+        <select id="prod-cat-select" class="select-compact" aria-label="Filtrar por categoría">
           <option value="ALL">Todas las categorías</option>
           ${(st.categories || [])
             .map(
-              (c) => `<option value="${c.id}" ${st.productCategoryFilter === c.id ? 'selected' : ''}>${escapeHTML(c.name)}</option>`
+              (c) => `<option value="${c.id}" ${String(st.productCategoryFilter) === String(c.id) ? 'selected' : ''}>${escapeHTML(c.name)}</option>`
             )
             .join('')}
         </select>
@@ -143,6 +265,21 @@ export function renderProductsViewHTML(st) {
         </label>
       </div>
 
+      <div class="stock-filter-bar" role="tablist" aria-label="Filtrar por estado de existencias">
+        <button type="button" class="filter-chip ${stockFilter === 'ALL' ? 'active' : ''}" data-prod-stock="ALL">
+          Todos (${allProducts.length})
+        </button>
+        <button type="button" class="filter-chip ${stockFilter === 'LOW' ? 'active' : ''}" data-prod-stock="LOW">
+          Stock bajo (${lowStockCount})
+        </button>
+        <button type="button" class="filter-chip ${stockFilter === 'OUT' ? 'active' : ''}" data-prod-stock="OUT">
+          Agotados (${outStockCount})
+        </button>
+        <button type="button" class="filter-chip ${stockFilter === 'EXPIRING' ? 'active' : ''}" data-prod-stock="EXPIRING">
+          Por vencer (${expiringCount})
+        </button>
+      </div>
+
       <div class="table-container">
         <table class="data-table">
           <thead>
@@ -150,7 +287,7 @@ export function renderProductsViewHTML(st) {
               <th>SKU / Código</th>
               <th>Producto</th>
               <th>Categoría</th>
-              <th class="num">Precio Venta</th>
+              <th class="num">Precio / Costo</th>
               <th>Existencia Vigente</th>
               <th>Estado</th>
               <th>Acciones</th>
@@ -168,11 +305,13 @@ export function renderProductsViewHTML(st) {
 export function bindProductsViewEvents(root, refreshAll) {
   const searchInput = root.querySelector('#prod-search-input')
   searchInput?.addEventListener('input', (e) => {
+    const pos = e.target.selectionStart
     setState({ productSearch: e.target.value })
     const el = document.querySelector('#prod-search-input')
     if (el) {
       el.focus()
-      el.setSelectionRange(el.value.length, el.value.length)
+      const caret = pos != null ? pos : el.value.length
+      el.setSelectionRange(caret, caret)
     }
   })
 
@@ -182,6 +321,12 @@ export function bindProductsViewEvents(root, refreshAll) {
 
   root.querySelector('#prod-show-inactive')?.addEventListener('change', (e) => {
     setState({ productShowInactive: e.target.checked })
+  })
+
+  root.querySelectorAll('[data-prod-stock]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      setState({ productStockFilter: btn.getAttribute('data-prod-stock') || 'ALL' })
+    })
   })
 
   root.querySelector('#btn-new-category')?.addEventListener('click', () => {
@@ -197,6 +342,16 @@ export function bindProductsViewEvents(root, refreshAll) {
       const pid = btn.getAttribute('data-prod-edit')
       const prod = getState().products.find((p) => p.id === pid)
       if (prod) openProductFormModal(prod, refreshAll)
+    })
+  })
+
+  root.querySelectorAll('[data-prod-duplicate]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const pid = btn.getAttribute('data-prod-duplicate')
+      const prod = getState().products.find((p) => p.id === pid)
+      if (prod) {
+        openProductFormModal(null, refreshAll, { duplicateFrom: prod })
+      }
     })
   })
 
@@ -218,12 +373,16 @@ export function bindProductsViewEvents(root, refreshAll) {
 }
 
 function openCategoryModal(refreshAll) {
+  if (!isOwner(getState().user)) {
+    showToast('error', 'Solo el Dueño puede crear categorías.')
+    return
+  }
   openDialog({
     title: 'Nueva Categoría',
     subtitle: 'Organiza el catálogo de productos para agilizar búsquedas y filtros.',
     maxWidth: '420px',
     bodyHTML: `
-      <form id="form-category" class="form-stack">
+      <form id="form-category" class="form-stack" novalidate>
         <div class="form-field">
           <label for="cat-name">Nombre de la categoría *</label>
           <input id="cat-name" type="text" required minlength="2" placeholder="Ej. Panadería" autofocus />
@@ -232,22 +391,37 @@ function openCategoryModal(refreshAll) {
           <label for="cat-desc">Descripción (opcional)</label>
           <input id="cat-desc" type="text" placeholder="Productos horneados y frescos" />
         </div>
-        <div id="cat-error" class="alert-error" hidden></div>
+        <div id="cat-error" class="alert-error" role="alert" hidden></div>
         <div class="dialog-actions">
           <button type="button" class="btn btn-ghost" data-dialog-close>Cancelar</button>
-          <button type="submit" class="btn btn-primary">Guardar Categoría</button>
+          <button type="submit" class="btn btn-primary" id="btn-save-category">Guardar Categoría</button>
         </div>
       </form>
     `,
     onMount(modal) {
       const form = modal.querySelector('#form-category')
       const errBox = modal.querySelector('#cat-error')
+      const saveBtn = modal.querySelector('#btn-save-category')
+      let saving = false
       form?.addEventListener('submit', async (e) => {
         e.preventDefault()
+        if (saving) return
         errBox.hidden = true
+        const nameVal = modal.querySelector('#cat-name').value.trim()
+        if (nameVal.length < 2) {
+          errBox.textContent = 'Escribe un nombre de al menos 2 caracteres.'
+          errBox.hidden = false
+          modal.querySelector('#cat-name').focus()
+          return
+        }
+        saving = true
+        if (saveBtn) {
+          saveBtn.disabled = true
+          saveBtn.textContent = 'Guardando...'
+        }
         try {
           await createCategoryRequest({
-            name: modal.querySelector('#cat-name').value.trim(),
+            name: nameVal,
             description: modal.querySelector('#cat-desc').value.trim(),
           })
           closeDialog()
@@ -256,157 +430,654 @@ function openCategoryModal(refreshAll) {
         } catch (err) {
           errBox.textContent = err.message
           errBox.hidden = false
+          saving = false
+          if (saveBtn) {
+            saveBtn.disabled = false
+            saveBtn.textContent = 'Guardar Categoría'
+          }
         }
       })
     },
   })
 }
 
-export function openProductFormModal(product = null, refreshAll) {
-  const isEdit = Boolean(product)
+export function openProductFormModal(product = null, refreshAll, options = {}) {
   const st = getState()
+  if (!isOwner(st.user)) {
+    showToast('error', 'Permiso denegado: solo el Dueño puede crear o editar productos.')
+    return
+  }
+
+  const isEdit = Boolean(product)
+  const dup = !isEdit ? options.duplicateFrom || null : null
+  const seed = product || dup || null
   const today = getTodayISO()
 
+  const initialName = isEdit
+    ? product.name || ''
+    : dup
+      ? `${dup.name} (Copia)`
+      : ''
+  const initialSku = isEdit ? product.sku || '' : ''
+  const initialBarcode = isEdit ? product.barcode || '' : ''
+  const initialUnit = seed?.unit || 'und'
+  const initialCategoryId = seed?.category_id ? String(seed.category_id) : ''
+  const initialPrice = seed?.sale_price ?? ''
+  const initialCost = seed?.unit_cost ?? ''
+  const initialMinStock = seed?.min_stock ?? 5
+  const initialDesc = seed?.description || ''
+  const initialColor = seed?.color_tag || 'slate'
+  const initialImage = seed?.image_url || ''
+  const previewSrc =
+    initialImage || buildAestheticFallbackSVG(initialName || 'Producto', initialSku || 'AUTO', initialColor)
+
+  const initialMargin = computeMarginStats(initialPrice, initialCost)
+
   openDialog({
-    title: isEdit ? `Editar Producto · ${escapeHTML(product.sku)}` : 'Crear Nuevo Producto',
+    title: isEdit
+      ? `Editar Producto · ${escapeHTML(product.sku)}`
+      : dup
+        ? 'Duplicar Producto'
+        : 'Nuevo Producto',
     subtitle: isEdit
-      ? 'Actualiza la información comercial del producto.'
-      : 'Registra los datos maestros y opcionalmente su lote de apertura.',
-    maxWidth: '580px',
+      ? 'Actualiza los datos comerciales sin alterar ventas históricas ni lotes registrados.'
+      : 'Alta rápida: solo Nombre y Precio son obligatorios. Los detalles de lote, código e imagen son opcionales.',
+    maxWidth: '620px',
     bodyHTML: `
-      <form id="form-product" class="form-stack">
-        <div class="form-row-2">
+      <form id="form-product" class="form-stack product-form-modern" novalidate>
+        <!-- SECCIÓN 1: ALTA RÁPIDA (ESENCIALES) -->
+        <div class="pf-section-card">
+          <div class="pf-section-header">
+            <span class="pf-step-label">Datos esenciales</span>
+            <span class="pf-required-hint">* Obligatorios para guardar</span>
+          </div>
+
           <div class="form-field">
             <label for="p-name">Nombre del producto *</label>
-            <input id="p-name" type="text" required minlength="2" value="${escapeHTML(product?.name || '')}" placeholder="Ej. Café Molido 500g" autofocus />
+            <input
+              id="p-name"
+              type="text"
+              required
+              minlength="2"
+              value="${escapeHTML(initialName)}"
+              placeholder="Ej. Café Molido Águila Roja 500g"
+              autocomplete="off"
+              autofocus
+            />
+            <span class="field-error" id="err-p-name" hidden></span>
           </div>
-          <div class="form-field">
-            <label for="p-cat">Categoría</label>
-            <select id="p-cat">
-              <option value="">Sin categoría</option>
-              ${(st.categories || [])
-                .map(
-                  (c) => `<option value="${c.id}" ${product?.category_id === c.id ? 'selected' : ''}>${escapeHTML(c.name)}</option>`
-                )
-                .join('')}
-            </select>
-          </div>
-        </div>
 
-        <div class="form-row-3">
-          <div class="form-field">
-            <label for="p-sku">Código SKU *</label>
-            <input id="p-sku" type="text" required value="${escapeHTML(product?.sku || '')}" placeholder="Ej. CAF-500" />
-          </div>
-          <div class="form-field">
-            <label for="p-barcode">Código de barras (EAN)</label>
-            <input id="p-barcode" type="text" value="${escapeHTML(product?.barcode || '')}" placeholder="Ej. 7702001099" />
-          </div>
-          <div class="form-field">
-            <label for="p-unit">Unidad de medida</label>
-            <select id="p-unit">
-              ${UNITS.map(
-                (u) => `<option value="${u.code}" ${product?.unit === u.code ? 'selected' : ''}>${u.label}</option>`
-              ).join('')}
-            </select>
-          </div>
-        </div>
+          <div class="form-row-2">
+            <div class="form-field">
+              <label for="p-price">Precio de venta (COP) *</label>
+              <div class="input-prefix-wrap">
+                <span class="input-prefix">$</span>
+                <input
+                  id="p-price"
+                  type="number"
+                  inputmode="decimal"
+                  step="any"
+                  min="1"
+                  required
+                  value="${escapeHTML(initialPrice)}"
+                  placeholder="Ej. 14500"
+                />
+              </div>
+              <span class="field-error" id="err-p-price" hidden></span>
+            </div>
 
-        <div class="form-row-2">
-          <div class="form-field">
-            <label for="p-price">Precio de Venta (COP) *</label>
-            <input id="p-price" type="number" step="any" min="1" required value="${product?.sale_price ?? ''}" placeholder="Ej. 14500" />
+            <div class="form-field">
+              <label for="p-cost">Costo unitario (COP) <span class="label-opt">(opcional)</span></label>
+              <div class="input-prefix-wrap">
+                <span class="input-prefix">$</span>
+                <input
+                  id="p-cost"
+                  type="number"
+                  inputmode="decimal"
+                  step="any"
+                  min="0"
+                  value="${escapeHTML(initialCost)}"
+                  placeholder="Ej. 10200"
+                />
+              </div>
+              <span class="field-error" id="err-p-cost" hidden></span>
+            </div>
           </div>
-          <div class="form-field">
-            <label for="p-min">Alerta de stock mínimo</label>
-            <input id="p-min" type="number" step="0.001" min="0" required value="${product?.min_stock ?? 5}" />
-          </div>
-        </div>
 
-        ${
-          !isEdit
-            ? `
-          <div class="fieldset-box">
-            <div class="fieldset-title">Lote de Ingreso Inicial (Opcional)</div>
-            <div class="form-row-3">
+          <div id="pf-margin-pill" class="pf-margin-pill margin-${initialMargin.status}" aria-live="polite">
+            ${escapeHTML(initialMargin.text)}
+          </div>
+
+          <div class="form-row-2">
+            <div class="form-field">
+              <label for="p-unit">Se vende por (unidad)</label>
+              <select id="p-unit">
+                ${UNITS.map(
+                  (u) => `<option value="${u.code}" ${initialUnit === u.code ? 'selected' : ''}>${u.label}</option>`
+                ).join('')}
+              </select>
+              <span class="field-hint" id="pf-unit-hint">
+                ${isBulkUnit(initialUnit) ? 'Permite cantidades decimales en el POS (ej. 0.5).' : 'Se vende en unidades enteras en el POS.'}
+              </span>
+            </div>
+
+            <div class="form-field">
+              <div class="label-with-action">
+                <label for="p-cat">Categoría</label>
+                <button type="button" class="btn-link-xs" id="btn-inline-new-cat">+ Nueva categoría</button>
+              </div>
+              <select id="p-cat">
+                <option value="">Sin categoría</option>
+                ${(st.categories || [])
+                  .map(
+                    (c) =>
+                      `<option value="${escapeHTML(c.id)}" ${initialCategoryId === String(c.id) ? 'selected' : ''}>${escapeHTML(c.name)}</option>`
+                  )
+                  .join('')}
+              </select>
+            </div>
+          </div>
+
+          <div id="inline-cat-box" class="inline-cat-box" hidden>
+            <input id="inline-cat-name" type="text" placeholder="Nombre de la nueva categoría..." />
+            <button type="button" class="btn btn-primary btn-sm" id="btn-inline-cat-save">Agregar</button>
+            <button type="button" class="btn btn-ghost btn-sm" id="btn-inline-cat-cancel">Cancelar</button>
+          </div>
+
+          ${
+            !isEdit
+              ? `
+            <div class="pf-quick-stock-row">
               <div class="form-field">
-                <label for="p-lot-num">N.° de Lote</label>
-                <input id="p-lot-num" type="text" value="L-${today.replace(/-/g, '')}-01" />
+                <label for="p-lot-qty">Stock inicial <span class="label-opt">(opcional · crea 1er lote FEFO)</span></label>
+                <input
+                  id="p-lot-qty"
+                  type="number"
+                  inputmode="decimal"
+                  step="${isBulkUnit(initialUnit) ? '0.001' : '1'}"
+                  min="0"
+                  value=""
+                  placeholder="0 (sin existencias iniciales aún)"
+                />
+                <span class="field-hint">Déjalo vacío o en 0 si ingresarás lotes después. Si pones más de 0, queda listo para vender.</span>
+                <span class="field-error" id="err-p-lot-qty" hidden></span>
               </div>
               <div class="form-field">
-                <label for="p-lot-qty">Cantidad Inicial</label>
-                <input id="p-lot-qty" type="number" step="0.001" min="0" value="10" />
-              </div>
-              <div class="form-field">
-                <label for="p-lot-cost">Costo Unitario (COP)</label>
-                <input id="p-lot-cost" type="number" step="any" min="0" value="0" />
+                <label for="p-lot-exp">Vencimiento del lote <span class="label-opt">(opcional)</span></label>
+                <input id="p-lot-exp" type="date" value="" />
+                <span class="field-hint">Solo para productos perecederos (control FEFO).</span>
               </div>
             </div>
+          `
+              : `
+            <div class="pf-edit-stock-summary">
+              <div>
+                <span class="pf-step-label">Inventario actual (controlado por lotes)</span>
+                <div class="pf-stock-readout">
+                  <strong>${formatQty(product.available_stock || 0, product.unit)}</strong>
+                  <span>en ${product.active_lots_count || 0} lote(s) vigentes · mínimo ${product.min_stock} ${escapeHTML(product.unit)}</span>
+                </div>
+              </div>
+              <button type="button" class="btn btn-outline btn-xs" id="btn-edit-add-lot">
+                ${icon('plus', 12)} Ingresar Lote
+              </button>
+            </div>
+          `
+          }
+        </div>
+
+        <!-- SECCIÓN 2: CAMPOS SECUNDARIOS COLAPSABLES -->
+        <details id="pf-secondary-details" class="pf-details-box" ${isEdit ? '' : ''}>
+          <summary class="pf-details-summary">
+            <span>Códigos (SKU / Barras), stock mínimo, lote e imagen</span>
+            <span class="pf-details-chevron">${icon('chevronDown', 15)}</span>
+          </summary>
+
+          <div class="pf-details-content">
             <div class="form-row-2">
               <div class="form-field">
-                <label for="p-lot-entry">Fecha de Ingreso</label>
-                <input id="p-lot-entry" type="date" value="${today}" />
+                <div class="label-with-action">
+                  <label for="p-sku">Código SKU ${isEdit ? '*' : '<span class="label-opt">(auto si queda vacío)</span>'}</label>
+                  ${!isEdit ? `<button type="button" class="btn-link-xs" id="btn-auto-sku">Sugerir SKU</button>` : ''}
+                </div>
+                <input
+                  id="p-sku"
+                  type="text"
+                  value="${escapeHTML(initialSku)}"
+                  placeholder="Automático al guardar (ej. CAF-001)"
+                  autocomplete="off"
+                />
+                <span class="field-error" id="err-p-sku" hidden></span>
               </div>
+
               <div class="form-field">
-                <label for="p-lot-exp">Fecha de Vencimiento</label>
-                <input id="p-lot-exp" type="date" value="" />
+                <label for="p-barcode">Código de barras (EAN / UPC)</label>
+                <input
+                  id="p-barcode"
+                  type="text"
+                  value="${escapeHTML(initialBarcode)}"
+                  placeholder="Ej. 7702001099012"
+                  autocomplete="off"
+                />
+                <span class="field-error" id="err-p-barcode" hidden></span>
+              </div>
+            </div>
+
+            <div class="form-row-2">
+              <div class="form-field">
+                <label for="p-min">Alerta de stock mínimo</label>
+                <input
+                  id="p-min"
+                  type="number"
+                  inputmode="decimal"
+                  step="0.001"
+                  min="0"
+                  value="${escapeHTML(initialMinStock)}"
+                />
+                <span class="field-error" id="err-p-min" hidden></span>
+              </div>
+
+              ${
+                !isEdit
+                  ? `
+                <div class="form-field">
+                  <label for="p-lot-num">N.° de lote inicial</label>
+                  <input id="p-lot-num" type="text" value="L-${today.replace(/-/g, '')}-01" />
+                </div>
+              `
+                  : `
+                <div class="form-field">
+                  <label for="p-desc">Nota / Descripción breve</label>
+                  <input id="p-desc" type="text" value="${escapeHTML(initialDesc)}" placeholder="Ej. Presentación familiar, proveedor..." />
+                </div>
+              `
+              }
+            </div>
+
+            ${
+              !isEdit
+                ? `
+              <div class="form-row-2">
+                <div class="form-field">
+                  <label for="p-lot-entry">Fecha de ingreso del lote</label>
+                  <input id="p-lot-entry" type="date" value="${today}" />
+                </div>
+                <div class="form-field">
+                  <label for="p-desc">Nota / Descripción breve</label>
+                  <input id="p-desc" type="text" value="${escapeHTML(initialDesc)}" placeholder="Ej. Presentación, marca o proveedor" />
+                </div>
+              </div>
+            `
+                : ''
+            }
+
+            <!-- Identificación visual (color o foto local) -->
+            <div class="pf-media-box">
+              <div class="pf-media-preview-wrap">
+                <img id="pf-image-preview" src="${escapeHTML(previewSrc)}" alt="Vista previa del producto" class="pf-image-preview" />
+              </div>
+              <div class="pf-media-controls">
+                <div class="form-field">
+                  <label>Color de tarjeta en POS (si no usas foto)</label>
+                  <div class="pf-color-swatches" role="radiogroup" aria-label="Color identificativo">
+                    ${PRODUCT_COLOR_PALETTE.map(
+                      (c) => `
+                      <button
+                        type="button"
+                        class="pf-color-swatch ${initialColor === c.id ? 'active' : ''}"
+                        data-color-choice="${c.id}"
+                        style="--swatch-bg: ${c.bg}; --swatch-accent: ${c.accent};"
+                        title="${c.label}"
+                        aria-label="Color ${c.label}"
+                        aria-pressed="${initialColor === c.id ? 'true' : 'false'}"
+                      ></button>
+                    `
+                    ).join('')}
+                  </div>
+                </div>
+                <div class="pf-upload-row">
+                  <label class="btn btn-outline btn-xs pf-upload-btn" for="p-image-file">
+                    ${icon('upload', 13)}
+                    <span>Subir foto</span>
+                  </label>
+                  <input id="p-image-file" type="file" accept="image/*" hidden />
+                  <button type="button" class="btn btn-ghost btn-xs" id="btn-clear-image" ${initialImage ? '' : 'hidden'}>
+                    Quitar foto
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        `
-            : ''
-        }
+        </details>
 
-        <div id="p-error" class="alert-error" hidden></div>
+        <div id="p-error" class="alert-error" role="alert" hidden></div>
 
-        <div class="dialog-actions">
+        <div class="dialog-actions pf-dialog-actions">
           <button type="button" class="btn btn-ghost" data-dialog-close>Cancelar</button>
-          <button type="submit" class="btn btn-primary">${isEdit ? 'Guardar Cambios' : 'Crear Producto'}</button>
+          ${
+            !isEdit
+              ? `<button type="button" class="btn btn-outline" id="btn-save-and-new">Guardar y crear otro</button>`
+              : ''
+          }
+          <button type="submit" class="btn btn-primary" id="btn-save-product">
+            ${isEdit ? 'Guardar Cambios' : 'Crear Producto'}
+          </button>
         </div>
       </form>
     `,
     onMount(modal) {
       const form = modal.querySelector('#form-product')
       const errBox = modal.querySelector('#p-error')
+      const detailsEl = modal.querySelector('#pf-secondary-details')
+      const nameInput = modal.querySelector('#p-name')
+      const priceInput = modal.querySelector('#p-price')
+      const costInput = modal.querySelector('#p-cost')
+      const unitSelect = modal.querySelector('#p-unit')
+      const catSelect = modal.querySelector('#p-cat')
+      const skuInput = modal.querySelector('#p-sku')
+      const barcodeInput = modal.querySelector('#p-barcode')
+      const minInput = modal.querySelector('#p-min')
+      const descInput = modal.querySelector('#p-desc')
+      const marginPill = modal.querySelector('#pf-margin-pill')
+      const unitHint = modal.querySelector('#pf-unit-hint')
+      const previewImg = modal.querySelector('#pf-image-preview')
+      const fileInput = modal.querySelector('#p-image-file')
+      const clearImgBtn = modal.querySelector('#btn-clear-image')
+      const saveBtn = modal.querySelector('#btn-save-product')
+      const saveAndNewBtn = modal.querySelector('#btn-save-and-new')
 
-      form?.addEventListener('submit', async (e) => {
-        e.preventDefault()
+      let selectedColor = initialColor
+      let uploadedImageDataUrl = initialImage || null
+      let isSaving = false
+
+      function refreshPreview() {
+        if (!previewImg) return
+        if (uploadedImageDataUrl) {
+          previewImg.src = uploadedImageDataUrl
+        } else {
+          previewImg.src = buildAestheticFallbackSVG(
+            nameInput?.value.trim() || 'Producto',
+            skuInput?.value.trim() || 'AUTO',
+            selectedColor
+          )
+        }
+      }
+
+      function refreshMargin() {
+        if (!marginPill) return
+        const m = computeMarginStats(priceInput?.value, costInput?.value)
+        marginPill.className = `pf-margin-pill margin-${m.status}`
+        marginPill.textContent = m.text
+      }
+
+      function clearFieldErrors() {
+        errBox.hidden = true
+        errBox.textContent = ''
+        modal.querySelectorAll('.field-error').forEach((el) => {
+          el.hidden = true
+          el.textContent = ''
+        })
+        modal.querySelectorAll('[aria-invalid="true"]').forEach((el) => {
+          el.removeAttribute('aria-invalid')
+        })
+      }
+
+      function setFieldError(inputId, msg, inSecondary = false) {
+        const input = modal.querySelector(`#${inputId}`)
+        const errSpan = modal.querySelector(`#err-${inputId}`)
+        if (inSecondary && detailsEl) {
+          detailsEl.open = true
+        }
+        if (input) input.setAttribute('aria-invalid', 'true')
+        if (errSpan) {
+          errSpan.textContent = msg
+          errSpan.hidden = false
+        }
+        return input
+      }
+
+      nameInput?.addEventListener('input', refreshPreview)
+      skuInput?.addEventListener('input', refreshPreview)
+      priceInput?.addEventListener('input', refreshMargin)
+      costInput?.addEventListener('input', refreshMargin)
+
+      unitSelect?.addEventListener('change', () => {
+        const bulk = isBulkUnit(unitSelect.value)
+        if (unitHint) {
+          unitHint.textContent = bulk
+            ? 'Permite cantidades decimales en el POS (ej. 0.5).'
+            : 'Se vende en unidades enteras en el POS.'
+        }
+        const qtyInput = modal.querySelector('#p-lot-qty')
+        if (qtyInput) qtyInput.step = bulk ? '0.001' : '1'
+      })
+
+      // Botón sugerir SKU automático
+      modal.querySelector('#btn-auto-sku')?.addEventListener('click', () => {
+        const suggested = generateUniqueSKU(nameInput?.value || 'PRD', getState().products || [])
+        if (skuInput) {
+          skuInput.value = suggested
+          refreshPreview()
+        }
+      })
+
+      // Crear categoría inline sin cerrar ni perder datos del producto
+      const inlineCatBox = modal.querySelector('#inline-cat-box')
+      const inlineCatInput = modal.querySelector('#inline-cat-name')
+      modal.querySelector('#btn-inline-new-cat')?.addEventListener('click', () => {
+        if (!inlineCatBox) return
+        inlineCatBox.hidden = !inlineCatBox.hidden
+        if (!inlineCatBox.hidden) inlineCatInput?.focus()
+      })
+      modal.querySelector('#btn-inline-cat-cancel')?.addEventListener('click', () => {
+        if (inlineCatBox) inlineCatBox.hidden = true
+        if (inlineCatInput) inlineCatInput.value = ''
+      })
+      modal.querySelector('#btn-inline-cat-save')?.addEventListener('click', async () => {
+        const newCatName = inlineCatInput?.value.trim() || ''
+        if (newCatName.length < 2) {
+          errBox.textContent = 'Escribe al menos 2 caracteres para la nueva categoría.'
+          errBox.hidden = false
+          inlineCatInput?.focus()
+          return
+        }
         errBox.hidden = true
         try {
-          const payload = {
-            name: modal.querySelector('#p-name').value.trim(),
-            category_id: modal.querySelector('#p-cat').value || null,
-            sku: modal.querySelector('#p-sku').value.trim(),
-            barcode: modal.querySelector('#p-barcode').value.trim() || null,
-            unit: modal.querySelector('#p-unit').value,
-            sale_price: Number(modal.querySelector('#p-price').value),
-            min_stock: Number(modal.querySelector('#p-min').value),
-          }
-
-          if (isEdit) {
-            await updateProductRequest(product.id, payload)
-            showToast('ok', `Producto "${payload.name}" actualizado.`)
-          } else {
-            const initQty = Number(modal.querySelector('#p-lot-qty').value || 0)
-            if (initQty > 0) {
-              payload.initial_lot = {
-                lot_number: modal.querySelector('#p-lot-num').value.trim(),
-                quantity: initQty,
-                unit_cost: Number(modal.querySelector('#p-lot-cost').value || 0),
-                entry_date: modal.querySelector('#p-lot-entry').value,
-                expiration_date: modal.querySelector('#p-lot-exp').value || null,
-              }
-            }
-            await createProductRequest(payload)
-            showToast('ok', `Producto "${payload.name}" creado correctamente.`)
-          }
-
-          closeDialog()
-          await refreshAll()
+          const createdCat = await createCategoryRequest({ name: newCatName })
+          const opt = document.createElement('option')
+          opt.value = createdCat.id
+          opt.textContent = createdCat.name
+          opt.selected = true
+          catSelect?.appendChild(opt)
+          // Sincronizar categorías en estado sin re-renderizar ni cerrar modal
+          setState({ categories: [...(getState().categories || []), createdCat] }, false)
+          if (inlineCatInput) inlineCatInput.value = ''
+          if (inlineCatBox) inlineCatBox.hidden = true
+          showToast('ok', `Categoría "${createdCat.name}" creada y seleccionada.`)
         } catch (err) {
           errBox.textContent = err.message
           errBox.hidden = false
         }
+      })
+
+      // En edición: acceso directo a ingresar un lote sin perder contexto
+      modal.querySelector('#btn-edit-add-lot')?.addEventListener('click', () => {
+        if (product?.id) {
+          openCreateLotModal(product.id, refreshAll)
+        }
+      })
+
+      // Selector de color
+      modal.querySelectorAll('[data-color-choice]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          selectedColor = btn.getAttribute('data-color-choice') || 'slate'
+          modal.querySelectorAll('[data-color-choice]').forEach((b) => {
+            const active = b === btn
+            b.classList.toggle('active', active)
+            b.setAttribute('aria-pressed', active ? 'true' : 'false')
+          })
+          refreshPreview()
+        })
+      })
+
+      // Subir foto local (comprimida en canvas)
+      fileInput?.addEventListener('change', async (e) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+        try {
+          uploadedImageDataUrl = await compressImageFileToDataURL(file, 240)
+          if (clearImgBtn) clearImgBtn.hidden = false
+          refreshPreview()
+        } catch (err) {
+          errBox.textContent = err.message
+          errBox.hidden = false
+        }
+      })
+
+      clearImgBtn?.addEventListener('click', () => {
+        uploadedImageDataUrl = null
+        if (fileInput) fileInput.value = ''
+        clearImgBtn.hidden = true
+        refreshPreview()
+      })
+
+      async function handleSave(createAnother = false) {
+        if (isSaving) return
+        clearFieldErrors()
+
+        let firstInvalid = null
+        const markErr = (id, msg, inSec = false) => {
+          const el = setFieldError(id, msg, inSec)
+          if (!firstInvalid) firstInvalid = el
+        }
+
+        const nameVal = nameInput?.value.trim() || ''
+        if (nameVal.length < 2) {
+          markErr('p-name', 'Ingresa un nombre de al menos 2 caracteres.')
+        }
+
+        const priceRaw = priceInput?.value.trim() || ''
+        const priceNum = Number(priceRaw)
+        if (!priceRaw || !Number.isFinite(priceNum) || priceNum <= 0) {
+          markErr('p-price', 'Ingresa un precio de venta mayor a $0.')
+        }
+
+        const costRaw = costInput?.value.trim() || ''
+        const costNum = costRaw === '' ? 0 : Number(costRaw)
+        if (costRaw !== '' && (!Number.isFinite(costNum) || costNum < 0)) {
+          markErr('p-cost', 'El costo unitario debe ser 0 o mayor.')
+        }
+
+        const minRaw = minInput?.value.trim() || ''
+        const minNum = minRaw === '' ? 5 : Number(minRaw)
+        if (!Number.isFinite(minNum) || minNum < 0) {
+          markErr('p-min', 'El stock mínimo debe ser 0 o mayor.', true)
+        }
+
+        const skuVal = skuInput?.value.trim() || ''
+        if (isEdit && !skuVal) {
+          markErr('p-sku', 'El SKU no puede quedar vacío al editar.', true)
+        }
+
+        let initQty = 0
+        if (!isEdit) {
+          const qtyRaw = modal.querySelector('#p-lot-qty')?.value.trim() || ''
+          initQty = qtyRaw === '' ? 0 : Number(qtyRaw)
+          if (!Number.isFinite(initQty) || initQty < 0) {
+            markErr('p-lot-qty', 'La cantidad inicial debe ser 0 o mayor.')
+          }
+        }
+
+        if (firstInvalid) {
+          errBox.textContent = 'Revisa los campos marcados en rojo antes de guardar.'
+          errBox.hidden = false
+          firstInvalid.focus()
+          return
+        }
+
+        const payload = {
+          name: nameVal,
+          category_id: catSelect?.value || null,
+          sku: skuVal,
+          barcode: barcodeInput?.value.trim() || null,
+          unit: unitSelect?.value || 'und',
+          sale_price: priceNum,
+          unit_cost: costNum,
+          min_stock: minNum,
+          description: descInput?.value.trim() || '',
+          color_tag: selectedColor,
+          image_url: uploadedImageDataUrl,
+        }
+
+        if (!isEdit && initQty > 0) {
+          payload.initial_lot = {
+            lot_number: modal.querySelector('#p-lot-num')?.value.trim() || '',
+            quantity: initQty,
+            unit_cost: costNum,
+            entry_date: modal.querySelector('#p-lot-entry')?.value || today,
+            expiration_date: modal.querySelector('#p-lot-exp')?.value || null,
+          }
+        }
+
+        isSaving = true
+        if (saveBtn) {
+          saveBtn.disabled = true
+          saveBtn.textContent = 'Guardando...'
+        }
+        if (saveAndNewBtn) saveAndNewBtn.disabled = true
+
+        try {
+          if (isEdit) {
+            await updateProductRequest(product.id, payload)
+            closeDialog()
+            await refreshAll()
+            showToast('ok', `Producto "${payload.name}" actualizado correctamente.`)
+          } else {
+            const created = await createProductRequest(payload)
+            await refreshAll()
+            if (createAnother) {
+              closeDialog()
+              showToast('ok', `Producto "${created.name}" (${created.sku}) creado. Listo para el siguiente.`)
+              openProductFormModal(null, refreshAll)
+            } else {
+              closeDialog()
+              showToast(
+                'ok',
+                `Producto "${created.name}" (${created.sku}) creado${initQty > 0 ? ` con ${initQty} ${created.unit}` : ' (sin stock inicial)'}.`
+              )
+            }
+          }
+        } catch (err) {
+          // Conservar todos los datos escritos y enfocar el campo relacionado si aplica
+          const msg = err.message || 'No se pudo guardar el producto.'
+          errBox.textContent = msg
+          errBox.hidden = false
+          if (/SKU/i.test(msg)) {
+            const el = setFieldError('p-sku', msg, true)
+            el?.focus()
+          } else if (/barras|EAN/i.test(msg)) {
+            const el = setFieldError('p-barcode', msg, true)
+            el?.focus()
+          } else if (/precio/i.test(msg)) {
+            const el = setFieldError('p-price', msg, false)
+            el?.focus()
+          }
+          isSaving = false
+          if (saveBtn) {
+            saveBtn.disabled = false
+            saveBtn.textContent = isEdit ? 'Guardar Cambios' : 'Crear Producto'
+          }
+          if (saveAndNewBtn) saveAndNewBtn.disabled = false
+        }
+      }
+
+      form?.addEventListener('submit', (e) => {
+        e.preventDefault()
+        handleSave(false)
+      })
+
+      saveAndNewBtn?.addEventListener('click', () => {
+        handleSave(true)
       })
     },
   })
@@ -620,12 +1291,18 @@ export function bindLotsViewEvents(root, refreshAll) {
 
 export function openCreateLotModal(preselectedProductId = null, refreshAll) {
   const st = getState()
+  if (!isOwner(st.user)) {
+    showToast('error', 'Permiso denegado: solo el Dueño puede registrar lotes.')
+    return
+  }
   const products = st.products || []
   if (products.length === 0) {
     showToast('error', 'Primero debes crear al menos un producto.')
     return
   }
 
+  const preselectedProd =
+    products.find((p) => p.id === preselectedProductId) || products[0]
   const today = getTodayISO()
   const sugLot = `L-${today.replace(/-/g, '')}-${String((st.lots?.length || 0) + 1).padStart(2, '0')}`
 
@@ -634,14 +1311,14 @@ export function openCreateLotModal(preselectedProductId = null, refreshAll) {
     subtitle: 'Ingresa las unidades recibidas, su fecha de entrada y fecha de vencimiento.',
     maxWidth: '520px',
     bodyHTML: `
-      <form id="form-new-lot" class="form-stack">
+      <form id="form-new-lot" class="form-stack" novalidate>
         <div class="form-field">
           <label for="nl-product">Producto *</label>
           <select id="nl-product" required>
             ${products
               .map(
                 (p) =>
-                  `<option value="${p.id}" ${preselectedProductId === p.id ? 'selected' : ''}>${escapeHTML(p.name)} (${escapeHTML(p.sku)})</option>`
+                  `<option value="${p.id}" ${preselectedProd?.id === p.id ? 'selected' : ''}>${escapeHTML(p.name)} (${escapeHTML(p.sku)})</option>`
               )
               .join('')}
           </select>
@@ -654,11 +1331,11 @@ export function openCreateLotModal(preselectedProductId = null, refreshAll) {
           </div>
           <div class="form-field">
             <label for="nl-qty">Cantidad Recibida *</label>
-            <input id="nl-qty" type="number" step="0.001" min="0.001" required placeholder="Ej. 24" autofocus />
+            <input id="nl-qty" type="number" inputmode="decimal" step="0.001" min="0.001" required placeholder="Ej. 24" autofocus />
           </div>
           <div class="form-field">
-            <label for="nl-cost">Costo Unitario (COP) *</label>
-            <input id="nl-cost" type="number" step="any" min="0" required value="0" />
+            <label for="nl-cost">Costo Unitario (COP)</label>
+            <input id="nl-cost" type="number" inputmode="decimal" step="any" min="0" value="${preselectedProd?.unit_cost ?? 0}" />
           </div>
         </div>
 
@@ -678,26 +1355,44 @@ export function openCreateLotModal(preselectedProductId = null, refreshAll) {
           <input id="nl-notes" type="text" placeholder="Ej. Factura #4021 Distribuidora" />
         </div>
 
-        <div id="nl-error" class="alert-error" hidden></div>
+        <div id="nl-error" class="alert-error" role="alert" hidden></div>
 
         <div class="dialog-actions">
           <button type="button" class="btn btn-ghost" data-dialog-close>Cancelar</button>
-          <button type="submit" class="btn btn-primary">Guardar Lote</button>
+          <button type="submit" class="btn btn-primary" id="btn-save-lot">Guardar Lote</button>
         </div>
       </form>
     `,
     onMount(modal) {
       const form = modal.querySelector('#form-new-lot')
       const errBox = modal.querySelector('#nl-error')
+      const saveBtn = modal.querySelector('#btn-save-lot')
+      const prodSel = modal.querySelector('#nl-product')
+      const costInp = modal.querySelector('#nl-cost')
+      let saving = false
+
+      prodSel?.addEventListener('change', () => {
+        const chosen = products.find((p) => p.id === prodSel.value)
+        if (chosen && costInp) {
+          costInp.value = chosen.unit_cost ?? 0
+        }
+      })
+
       form?.addEventListener('submit', async (e) => {
         e.preventDefault()
+        if (saving) return
         errBox.hidden = true
+        saving = true
+        if (saveBtn) {
+          saveBtn.disabled = true
+          saveBtn.textContent = 'Guardando...'
+        }
         try {
           await createLotRequest({
             product_id: modal.querySelector('#nl-product').value,
             lot_number: modal.querySelector('#nl-code').value.trim(),
             quantity: Number(modal.querySelector('#nl-qty').value),
-            unit_cost: Number(modal.querySelector('#nl-cost').value),
+            unit_cost: Number(modal.querySelector('#nl-cost').value || 0),
             entry_date: modal.querySelector('#nl-entry').value,
             expiration_date: modal.querySelector('#nl-exp').value || null,
             notes: modal.querySelector('#nl-notes').value.trim(),
@@ -708,6 +1403,11 @@ export function openCreateLotModal(preselectedProductId = null, refreshAll) {
         } catch (err) {
           errBox.textContent = err.message
           errBox.hidden = false
+          saving = false
+          if (saveBtn) {
+            saveBtn.disabled = false
+            saveBtn.textContent = 'Guardar Lote'
+          }
         }
       })
     },
@@ -715,12 +1415,16 @@ export function openCreateLotModal(preselectedProductId = null, refreshAll) {
 }
 
 function openAdjustLotModal(lot, refreshAll) {
+  if (!isOwner(getState().user)) {
+    showToast('error', 'Permiso denegado: solo el Dueño puede ajustar lotes.')
+    return
+  }
   openDialog({
     title: `Movimiento de Lote · ${escapeHTML(lot.lot_number)}`,
     subtitle: `${escapeHTML(lot.product_name)} · Saldo actual: ${formatQty(lot.available_quantity, lot.product_unit)}`,
     maxWidth: '500px',
     bodyHTML: `
-      <form id="form-adjust-lot" class="form-stack">
+      <form id="form-adjust-lot" class="form-stack" novalidate>
         <div class="form-field">
           <label for="adj-op">Tipo de operación *</label>
           <select id="adj-op" required>
@@ -733,11 +1437,11 @@ function openAdjustLotModal(lot, refreshAll) {
         <div class="form-row-3">
           <div class="form-field">
             <label for="adj-qty">Cantidad *</label>
-            <input id="adj-qty" type="number" step="0.001" min="0" required value="1" autofocus />
+            <input id="adj-qty" type="number" inputmode="decimal" step="0.001" min="0" required value="1" autofocus />
           </div>
           <div class="form-field">
             <label for="adj-cost">Costo Unitario (COP)</label>
-            <input id="adj-cost" type="number" step="any" min="0" required value="${lot.unit_cost}" />
+            <input id="adj-cost" type="number" inputmode="decimal" step="any" min="0" required value="${lot.unit_cost}" />
           </div>
           <div class="form-field">
             <label for="adj-exp">Fecha Vencimiento</label>
@@ -750,20 +1454,28 @@ function openAdjustLotModal(lot, refreshAll) {
           <input id="adj-reason" type="text" required minlength="3" placeholder="Ej. Conteo físico de inventario / Baja por rotura" />
         </div>
 
-        <div id="adj-error" class="alert-error" hidden></div>
+        <div id="adj-error" class="alert-error" role="alert" hidden></div>
 
         <div class="dialog-actions">
           <button type="button" class="btn btn-ghost" data-dialog-close>Cancelar</button>
-          <button type="submit" class="btn btn-primary">Registrar Movimiento</button>
+          <button type="submit" class="btn btn-primary" id="btn-save-adjust">Registrar Movimiento</button>
         </div>
       </form>
     `,
     onMount(modal) {
       const form = modal.querySelector('#form-adjust-lot')
       const errBox = modal.querySelector('#adj-error')
+      const saveBtn = modal.querySelector('#btn-save-adjust')
+      let saving = false
       form?.addEventListener('submit', async (e) => {
         e.preventDefault()
+        if (saving) return
         errBox.hidden = true
+        saving = true
+        if (saveBtn) {
+          saveBtn.disabled = true
+          saveBtn.textContent = 'Registrando...'
+        }
         try {
           await adjustLotRequest(lot.id, {
             operation: modal.querySelector('#adj-op').value,
@@ -778,6 +1490,11 @@ function openAdjustLotModal(lot, refreshAll) {
         } catch (err) {
           errBox.textContent = err.message
           errBox.hidden = false
+          saving = false
+          if (saveBtn) {
+            saveBtn.disabled = false
+            saveBtn.textContent = 'Registrar Movimiento'
+          }
         }
       })
     },
@@ -994,6 +1711,10 @@ export function renderSalesViewHTML(st) {
           <strong class="metric-val">${formatCOP(byMethod.nequi || 0)}</strong>
         </div>
         <div class="metric-card">
+          <span class="metric-label">Bancolombia</span>
+          <strong class="metric-val">${formatCOP(byMethod.bancolombia || 0)}</strong>
+        </div>
+        <div class="metric-card">
           <span class="metric-label">Daviplata</span>
           <strong class="metric-val">${formatCOP(byMethod.daviplata || 0)}</strong>
         </div>
@@ -1036,6 +1757,7 @@ export function renderSalesViewHTML(st) {
             <option value="">Todos</option>
             <option value="efectivo" ${st.salesFilterMethod === 'efectivo' ? 'selected' : ''}>Efectivo</option>
             <option value="nequi" ${st.salesFilterMethod === 'nequi' ? 'selected' : ''}>Nequi</option>
+            <option value="bancolombia" ${st.salesFilterMethod === 'bancolombia' ? 'selected' : ''}>Bancolombia</option>
             <option value="daviplata" ${st.salesFilterMethod === 'daviplata' ? 'selected' : ''}>Daviplata</option>
           </select>
         </div>

@@ -35,11 +35,13 @@ const state = {
   saleNotes: '',
   transferVerification: null,
   mobileTicketOpen: false,
+  mobileMenuOpen: false,
   lastCompletedSale: null,
 
   // Filtros en vistas de Dueño
   productSearch: '',
   productCategoryFilter: 'ALL',
+  productStockFilter: 'ALL',
   productShowInactive: true,
   lotFilterStatus: 'ALL',
   lotFilterProduct: 'ALL',

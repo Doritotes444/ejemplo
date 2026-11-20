@@ -18,7 +18,11 @@ import {
   computeOwnerQuickMetrics,
   sortSellableLotsFEFO,
   buildAestheticFallbackSVG,
+  generateUniqueSKU,
+  assertOwnerAccess,
+  isValidISODate,
 } from '../js/core/localStore.js'
+import { isBulkUnit, getUnitStep } from '../js/utils/quantities.js'
 
 function assert(condition, message) {
   if (!condition) {
@@ -59,25 +63,29 @@ assert(totals.total === 9600, 'Total calculado correctamente (3 * 3200 = 9600)')
 assert(calculateChange(10000, totals.total) === 400, 'Cálculo de cambio exacto ($400)')
 assert(formatCOP(9600).includes('9.600'), 'Formato COP válido')
 
-// 2. Cantidades a granel (kg)
+// 2. Cantidades a granel (kg, lb, lt, gr)
+assert(isBulkUnit('kg') && isBulkUnit('lb') && isBulkUnit('lt') && isBulkUnit('gr'), 'Reconoce kg, lb, lt y gr como unidades a granel')
+assert(!isBulkUnit('und') && !isBulkUnit('caja'), 'und y caja son unidades enteras')
+assert(getUnitStep('lb') === 0.25 && getUnitStep('gr') === 50 && getUnitStep('und') === 1, 'Pasos por unidad correctos')
+
 const bulkProduct = {
   id: 'prd_02',
-  sku: 'QUE-KG',
-  name: 'Queso Fresco',
-  unit: 'kg',
-  sale_price: 20000,
+  sku: 'QUE-LB',
+  name: 'Queso Fresco Libra',
+  unit: 'lb',
+  sale_price: 10000,
   available_stock: 5.5,
   is_active: true,
 }
 
 let bulkRes = addProductToCart([], bulkProduct, 0.75)
-assert(bulkRes.ok === true && bulkRes.cart[0].quantity === 0.75, 'Soporta 0.75 kg')
+assert(bulkRes.ok === true && bulkRes.cart[0].quantity === 0.75, 'Soporta 0.75 lb')
 const updatedBulk = updateCartItemQty(bulkRes.cart, 'prd_02', 1.25)
-assert(updatedBulk[0].quantity === 1.25, 'Actualiza a 1.25 kg')
+assert(updatedBulk[0].quantity === 1.25, 'Actualiza a 1.25 lb')
 const afterRemove = removeCartItem(updatedBulk, 'prd_02')
 assert(afterRemove.length === 0, 'Elimina línea del carrito')
 
-// 3. Control de rutas por rol en el cliente
+// 3. Control de rutas y operaciones por rol (RBAC)
 const tenderoUser = { id: 'u1', role: 'tendero' }
 const duenoUser = { id: 'u2', role: 'dueno' }
 
@@ -91,6 +99,15 @@ assert(isRouteAllowed(duenoUser, 'users') === true, 'Dueño puede acceder a usua
 assert(isRouteAllowed(duenoUser, 'lots') === true, 'Dueño puede acceder a lotes')
 assert(isRouteAllowed(duenoUser, 'reviews') === true, 'Dueño puede acceder al Muro de Reseñas privado')
 assert(isRouteAllowed(duenoUser, 'settings') === true, 'Dueño puede acceder a Ajustes')
+
+assert(assertOwnerAccess(duenoUser, 'crear productos') === duenoUser, 'assertOwnerAccess permite al Dueño')
+let rbacBlocked = false
+try {
+  assertOwnerAccess(tenderoUser, 'crear productos')
+} catch (err) {
+  rbacBlocked = /Permiso denegado/i.test(err.message)
+}
+assert(rbacBlocked === true, 'assertOwnerAccess bloquea al Tendero')
 
 // 4. Ordenamiento FEFO / FIFO y Métricas Rápidas del Dueño
 const sortedLots = sortSellableLotsFEFO(
@@ -107,9 +124,15 @@ assert(sortedLots[0].id === 'l2', 'Prioriza FEFO (vence primero l2)')
 const metrics = computeOwnerQuickMetrics(SEED_PRODUCTS, [])
 assert(metrics.low_stock_count > 0, 'Detecta productos con alerta de bajo stock en el catálogo semilla')
 
-// 5. Fallback estético SVG (onerror) para miniaturas de productos
-const fallbackSvg = buildAestheticFallbackSVG('Cafe Aguila Roja 500g', 'ABAR-001')
+// 5. Fallback estético SVG (onerror), generador de SKU y validación de fechas
+const fallbackSvg = buildAestheticFallbackSVG('Cafe Aguila Roja 500g', 'ABAR-001', 'emerald')
 assert(fallbackSvg.startsWith('data:image/svg+xml;utf8,'), 'Genera Data-URI SVG estético válido')
 assert(decodeURIComponent(fallbackSvg).includes('CA'), 'Incluye monograma de iniciales del producto')
+assert(decodeURIComponent(fallbackSvg).includes('#064e3b'), 'Aplica paleta de color seleccionada al SVG')
 
-console.log('OK: Todas las pruebas de frontend (Catálogo COP, Carrito, FEFO/FIFO, Métricas Rápidas, RBAC, Reseñas/Ajustes y Fallback SVG) pasaron.')
+const sku1 = generateUniqueSKU('Café Molido', [])
+const sku2 = generateUniqueSKU('Café Molido', [{ sku: sku1 }])
+assert(sku1 === 'CAFMO-001' && sku2 === 'CAFMO-002', `Genera SKUs únicos secuenciales (${sku1}, ${sku2})`)
+assert(isValidISODate('2026-11-19') === true && isValidISODate('2026-02-30') === false, 'Valida fechas ISO reales')
+
+console.log('OK: Todas las pruebas de frontend (Catálogo COP, Carrito, Unidades Granel, FEFO/FIFO, Métricas Rápidas, RBAC, SKU/Fechas y Fallback SVG) pasaron.')

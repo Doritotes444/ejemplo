@@ -11,5 +11,5 @@ export async function registerSaleRequest(payload) {
 }
 
 export async function fetchSales(filters = {}) {
-  return getFilteredSalesLocal(filters)
+  return getFilteredSalesLocal(filters, getState().user)
 }

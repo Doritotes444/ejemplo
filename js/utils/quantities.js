@@ -3,10 +3,29 @@
  * Con precisión de hasta 3 decimales para evitar errores de punto flotante en JS.
  */
 
-export const UNIDADES_GRANEL = new Set(['kg', 'kilo', 'libra', 'litro', 'gramo', 'metro'])
+export const UNIDADES_GRANEL = new Set([
+  'kg',
+  'kilo',
+  'lb',
+  'libra',
+  'lt',
+  'litro',
+  'gr',
+  'gramo',
+  'ml',
+  'm',
+  'metro',
+])
 
 export function isBulkUnit(unidad) {
-  return UNIDADES_GRANEL.has(String(unidad || '').toLowerCase())
+  return UNIDADES_GRANEL.has(String(unidad || '').trim().toLowerCase())
+}
+
+export function getUnitStep(unidad) {
+  const u = String(unidad || '').trim().toLowerCase()
+  if (u === 'gr' || u === 'gramo' || u === 'ml') return 50
+  if (isBulkUnit(u)) return 0.25
+  return 1
 }
 
 export function roundQty(value) {

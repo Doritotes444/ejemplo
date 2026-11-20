@@ -100,6 +100,9 @@ export function openBarcodeScannerModal() {
     title: 'Lector de Código de Barras (Cámara)',
     subtitle: 'Apunta la cámara trasera del celular al código EAN-13 / QR del producto para registrarlo en el ticket.',
     maxWidth: '520px',
+    onClose: () => {
+      stopScannerCleanly()
+    },
     bodyHTML: `
       <div class="hardware-modal-stack">
         <div class="scanner-viewport-wrap">
@@ -255,6 +258,9 @@ export function openTransferVerifierModal(totalAmount) {
     title: 'Verificar Transferencia (Nequi / Bancolombia)',
     subtitle: `Captura fotográfica del comprobante en pantalla con sello de tiempo exacto por ${formatCOP(totalAmount)}.`,
     maxWidth: '540px',
+    onClose: () => {
+      stopCameraStream()
+    },
     bodyHTML: `
       <div class="hardware-modal-stack">
         <div class="form-row-2">
