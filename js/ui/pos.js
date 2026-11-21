@@ -14,7 +14,7 @@ import {
   saveUISettingsSync,
   buildAestheticFallbackSVG,
 } from '../core/localStore.js'
-import { formatCOP, BILLETES_RAPIDOS, calculateChange } from '../utils/money.js'
+import { formatCOP, BILLETES_RAPIDOS, calculateChange, roundMoney } from '../utils/money.js'
 import { isBulkUnit, getUnitStep, formatQty } from '../utils/quantities.js'
 import { icon } from './icons.js'
 import { openSaleReceiptModal } from './receipt.js'
@@ -25,6 +25,7 @@ import {
   handleScannedCode,
 } from './hardware.js'
 import { openProductFormModal } from './lots.js'
+import { filterAndRankProducts } from '../utils/search.js'
 
 const PAYMENT_METHODS = [
   { code: 'efectivo', label: 'Efectivo' },
@@ -41,21 +42,16 @@ function escapeHTML(str) {
     .replace(/"/g, '&quot;')
 }
 
-function getFilteredPOSProducts(st) {
-  const q = String(st.posSearch || '').trim().toLowerCase()
+export function getFilteredPOSProducts(st) {
   const cat = st.posCategory || 'ALL'
-
-  return (st.products || []).filter((p) => {
+  const activeProducts = (st.products || []).filter((p) => {
     if (!p.is_active) return false
     if (cat !== 'ALL' && String(p.category_id) !== String(cat)) return false
-    if (!q) return true
-    return (
-      String(p.name || '').toLowerCase().includes(q) ||
-      String(p.sku || '').toLowerCase().includes(q) ||
-      String(p.barcode || '').toLowerCase().includes(q)
-    )
+    return true
   })
+  return filterAndRankProducts(activeProducts, st.posSearch || '')
 }
+
 
 let inlineHtml5Scanner = null
 let inlineScannerRunning = false
@@ -72,30 +68,12 @@ export async function stopInline50vhScanner() {
   }
 }
 
-export function renderPOSViewHTML(st) {
-  const ui = getUISettingsSync()
-  const owner = isOwner(st.user)
-  const allFiltered = getFilteredPOSProducts(st)
-  const limit = st.posSearch ? 120 : st.posVisibleLimit || 60
-  const visibleProducts = allFiltered.slice(0, limit)
-  const remainingCount = Math.max(0, allFiltered.length - visibleProducts.length)
-
-  const categories = st.categories || []
-  const { subtotal, total, itemsCount } = calculateCartTotals(st.cart)
-
-  const receivedNum =
-    st.paymentMethod === 'efectivo' && st.amountReceived !== ''
-      ? Number(st.amountReceived)
-      : total
-  const changeAmount =
-    st.paymentMethod === 'efectivo' && st.amountReceived !== ''
-      ? calculateChange(receivedNum, total)
-      : 0
-
+export function renderPOSCatalogContentHTML(allFiltered, st, ui) {
   const isStoreBlank = (st.products || []).length === 0
+  const owner = isOwner(st.user)
 
-  const rowsHTML = isStoreBlank
-    ? owner
+  if (isStoreBlank) {
+    return owner
       ? `
         <div class="empty-state blank-store-cta">
           <div class="blank-store-icon">${icon('products', 28)}</div>
@@ -114,96 +92,140 @@ export function renderPOSViewHTML(st) {
           <p class="empty-subtitle">El catálogo todavía está vacío. Solicita al Dueño que registre los productos e ingrese los lotes iniciales para empezar a vender.</p>
         </div>
       `
-    : visibleProducts.length === 0
-    ? `
-      <div class="empty-state">
-        <p class="empty-title">No hay productos disponibles para este criterio</p>
-        <p class="empty-subtitle">Ajusta el término de búsqueda, cambia la categoría o escanea un código de barras válido.</p>
+  }
+
+  const limit = st.posSearch ? 120 : st.posVisibleLimit || 60
+  const visibleProducts = allFiltered.slice(0, limit)
+  const remainingCount = Math.max(0, allFiltered.length - visibleProducts.length)
+
+  if (visibleProducts.length === 0) {
+    return `
+      <div class="empty-state pos-empty-search-state">
+        <div class="blank-store-icon">${icon('search', 28)}</div>
+        <p class="empty-title">${st.posSearch ? `Sin resultados para "${escapeHTML(st.posSearch)}"` : 'No hay productos disponibles para este criterio'}</p>
+        <p class="empty-subtitle">${st.posSearch ? 'Revisa el término escrito o prueba limpiando la búsqueda.' : 'Ajusta el término de búsqueda o cambia la categoría.'}</p>
+        ${
+          st.posSearch || st.posCategory !== 'ALL'
+            ? `<button type="button" class="btn btn-outline btn-sm empty-action-btn" id="btn-pos-reset-filters">Limpiar filtros</button>`
+            : ''
+        }
       </div>
     `
-    : `
-      <div class="pos-catalog-grid">
-        ${visibleProducts
-          .map((p) => {
-            const avail = Number(p.available_stock || 0)
-            const isOut = avail <= 0
-            const isLow = !isOut && p.is_low_stock
-            const inCart = st.cart.find((c) => c.product_id === p.id)
+  }
 
-            let stockBadge = `<span class="status-badge badge-success">${formatQty(avail, p.unit)}</span>`
-            if (isOut) {
-              stockBadge = `<span class="status-badge badge-danger">Agotado</span>`
-            } else if (isLow) {
-              stockBadge = `<span class="status-badge badge-warning">${formatQty(avail, p.unit)}</span>`
-            }
+  return `
+    <div class="pos-catalog-grid" id="pos-catalog-grid">
+      ${visibleProducts
+        .map((p, idx) => {
+          const avail = Number(p.available_stock || 0)
+          const isOut = avail <= 0
+          const isLow = !isOut && p.is_low_stock
+          const inCart = st.cart.find((c) => c.product_id === p.id)
+          const isSelected = st.posSelectedProductId === p.id
 
-            const imgSrc =
-              p.image_url || buildAestheticFallbackSVG(p.name, p.sku, p.color_tag || 'slate')
+          let stockBadge = `<span class="status-badge badge-success">${formatQty(avail, p.unit)}</span>`
+          if (isOut) {
+            stockBadge = `<span class="status-badge badge-danger">${icon('alert', 12)} Agotado</span>`
+          } else if (isLow) {
+            stockBadge = `<span class="status-badge badge-warning">${icon('alert', 12)} Bajo · ${formatQty(avail, p.unit)}</span>`
+          }
 
-            return `
-              <button
-                type="button"
-                class="pos-product-tile ${isOut ? 'tile-disabled' : ''} ${inCart ? 'tile-selected' : ''}"
-                data-pos-add="${p.id}"
-                ${isOut ? 'disabled' : ''}
-              >
-                <div class="tile-top-row">
-                  ${
-                    ui.showThumbnails
-                      ? `
-                    <div class="tile-thumb-wrap">
-                      <img
-                        src="${escapeHTML(imgSrc)}"
-                        alt="${escapeHTML(p.name)}"
-                        class="tile-thumb-img"
-                        data-sku="${escapeHTML(p.sku)}"
-                        data-color="${escapeHTML(p.color_tag || 'slate')}"
-                        loading="lazy"
-                        onerror="window.handleProductImageError && window.handleProductImageError(this)"
-                      />
-                    </div>
-                  `
-                      : ''
-                  }
-                  <div class="tile-head-meta">
-                    <div class="tile-top">
-                      <span class="tile-sku">${escapeHTML(p.sku)}</span>
-                      ${stockBadge}
-                    </div>
-                    <div class="tile-name">${escapeHTML(p.name)}</div>
-                    <div class="tile-barcode-sub">${escapeHTML(p.category_name || 'Sin categoría')}${p.barcode ? ` · EAN ${escapeHTML(p.barcode)}` : ''}</div>
+          const imgSrc =
+            p.image_url || buildAestheticFallbackSVG(p.name, p.sku, p.color_tag || 'slate')
+
+          return `
+            <button
+              type="button"
+              class="pos-product-tile ${isOut ? 'tile-disabled' : ''} ${inCart ? 'tile-selected' : ''} ${isSelected ? 'is-selected' : ''}"
+              data-pos-tile="${p.id}"
+              data-pos-tile-idx="${idx}"
+              ${isOut ? 'disabled' : ''}
+              aria-label="${escapeHTML(p.name)} - ${formatCOP(p.sale_price)}"
+            >
+              <div class="tile-top-row">
+                ${
+                  ui.showThumbnails
+                    ? `
+                  <div class="tile-thumb-wrap">
+                    <img
+                      src="${escapeHTML(imgSrc)}"
+                      alt="${escapeHTML(p.name)}"
+                      class="tile-thumb-img"
+                      data-sku="${escapeHTML(p.sku)}"
+                      data-color="${escapeHTML(p.color_tag || 'slate')}"
+                      loading="lazy"
+                      onerror="window.handleProductImageError && window.handleProductImageError(this)"
+                    />
                   </div>
-                </div>
-                <div class="tile-bottom">
-                  <div class="tile-price">
-                    <strong>${formatCOP(p.sale_price)}</strong>
-                    <small>/ ${escapeHTML(p.unit)}</small>
+                `
+                    : ''
+                }
+                <div class="tile-head-meta">
+                  <div class="tile-top">
+                    <span class="tile-sku">${escapeHTML(p.sku)}</span>
+                    ${stockBadge}
                   </div>
-                  ${
-                    inCart
-                      ? `<span class="tile-cart-qty">${inCart.quantity} en ticket</span>`
-                      : p.next_lot_number
-                      ? `<span class="tile-lot-hint">Lote ${escapeHTML(p.next_lot_number)}</span>`
-                      : ''
-                  }
+                  <div class="tile-name" title="${escapeHTML(p.name)}">${escapeHTML(p.name)}</div>
+                  <div class="tile-barcode-sub">${escapeHTML(p.category_name || 'Sin categoría')}${p.barcode ? ` · EAN ${escapeHTML(p.barcode)}` : ''}</div>
                 </div>
-              </button>
-            `
-          })
-          .join('')}
+              </div>
+              <div class="tile-bottom">
+                <div class="tile-price">
+                  <strong>${formatCOP(p.sale_price)}</strong>
+                  <small>/ ${escapeHTML(p.unit)}</small>
+                </div>
+                ${
+                  inCart
+                    ? `<span class="tile-cart-qty">${inCart.quantity} en ticket</span>`
+                    : p.next_lot_number
+                    ? `<span class="tile-lot-hint">Lote ${escapeHTML(p.next_lot_number)}</span>`
+                    : ''
+                }
+              </div>
+            </button>
+          `
+        })
+        .join('')}
+    </div>
+    ${
+      remainingCount > 0
+        ? `
+      <div class="catalog-load-more">
+        <button type="button" class="btn btn-outline btn-sm" id="btn-pos-load-more">
+          Mostrar más productos (${remainingCount} restantes de ${allFiltered.length})
+        </button>
       </div>
-      ${
-        remainingCount > 0
-          ? `
-        <div class="catalog-load-more">
-          <button type="button" class="btn btn-outline btn-sm" id="btn-pos-load-more">
-            Mostrar más productos (${remainingCount} restantes de ${allFiltered.length})
-          </button>
-        </div>
-      `
-          : ''
-      }
     `
+        : ''
+    }
+  `
+}
+
+export function renderPOSViewHTML(st) {
+  const ui = getUISettingsSync()
+  const owner = isOwner(st.user)
+  const allFiltered = getFilteredPOSProducts(st)
+  const rowsHTML = renderPOSCatalogContentHTML(allFiltered, st, ui)
+
+  const categories = st.categories || []
+  const { subtotal, total, itemsCount } = calculateCartTotals(st.cart)
+
+  const receivedNum =
+    st.paymentMethod === 'efectivo' && st.amountReceived !== ''
+      ? Number(st.amountReceived)
+      : total
+  const changeAmount =
+    st.paymentMethod === 'efectivo' && st.amountReceived !== ''
+      ? calculateChange(receivedNum, total)
+      : 0
+
+  const selectedProd = st.posSelectedProductId
+    ? (st.products || []).find((p) => p.id === st.posSelectedProductId)
+    : null
+  const traySubtotal = selectedProd
+    ? roundMoney((st.posSelectedQty || 1) * selectedProd.sale_price)
+    : 0
+
 
   const cartHTML =
     st.cart.length === 0
@@ -220,8 +242,8 @@ export function renderPOSViewHTML(st) {
             return `
               <div class="cart-line">
                 <div class="cart-line-main">
-                  <div>
-                    <div class="cart-line-name">${escapeHTML(item.name)}</div>
+                  <div class="cart-line-info">
+                    <div class="cart-line-name" title="${escapeHTML(item.name)}">${escapeHTML(item.name)}</div>
                     <div class="cart-line-meta">
                       <span>${escapeHTML(item.sku)}</span>
                       <span>·</span>
@@ -311,7 +333,17 @@ export function renderPOSViewHTML(st) {
               value="${escapeHTML(st.posSearch)}"
               placeholder="Buscar producto por nombre, SKU o código de barras..."
               autocomplete="off"
+              aria-label="Buscar producto en catálogo"
             />
+            <button
+              type="button"
+              class="search-clear-btn"
+              id="btn-pos-clear-search"
+              aria-label="Limpiar búsqueda"
+              style="display: ${st.posSearch ? 'inline-flex' : 'none'};"
+            >
+              ${icon('close', 14)}
+            </button>
           </div>
 
           <div class="toolbar-actions">
@@ -326,12 +358,12 @@ export function renderPOSViewHTML(st) {
             </button>
             <button
               type="button"
-              class="btn btn-primary btn-sm"
+              class="btn btn-outline btn-sm"
               id="btn-pos-barcode-camera"
               title="Abrir modal de escáner de código de barras"
             >
               ${icon('barcode', 15)}
-              <span>Escanear Código</span>
+              <span>Escanear</span>
             </button>
             <button type="button" class="btn btn-outline btn-sm" id="btn-pos-my-sales">
               ${icon('sales', 15)}
@@ -366,13 +398,53 @@ export function renderPOSViewHTML(st) {
         <div class="pos-catalog-scroll">
           ${rowsHTML}
         </div>
+
+        ${
+          selectedProd
+            ? `
+          <div class="pos-mobile-selection-tray" id="pos-mobile-selection-tray" role="region" aria-label="Confirmación de selección para el pulgar">
+            <div class="pos-tray-prod-row">
+              <div class="pos-tray-prod-info">
+                <strong class="pos-tray-name">${escapeHTML(selectedProd.name)}</strong>
+                <div class="pos-tray-meta">
+                  <span>${formatCOP(selectedProd.sale_price)} · Disponible: ${selectedProd.available_stock} ${escapeHTML(selectedProd.unit)}</span>
+                </div>
+              </div>
+              <button type="button" class="btn-icon btn-icon-subtle" id="btn-tray-cancel" aria-label="Cancelar selección">
+                ${icon('close', 14)}
+              </button>
+            </div>
+
+            <div class="pos-tray-controls-row">
+              <div class="pos-tray-qty-group">
+                <button type="button" class="qty-btn" id="btn-tray-dec" aria-label="Disminuir cantidad">
+                  ${icon('minus', 13)}
+                </button>
+                <span class="pos-tray-qty-val" id="tray-qty-display">${formatQty(st.posSelectedQty || 1, selectedProd.unit)}</span>
+                <button type="button" class="qty-btn" id="btn-tray-inc" aria-label="Aumentar cantidad">
+                  ${icon('plus', 13)}
+                </button>
+              </div>
+
+              <button type="button" class="btn btn-primary pos-tray-submit-btn" id="btn-tray-confirm-add">
+                ${icon('plus', 16)}
+                <span>Agregar al carrito (${formatCOP(traySubtotal)})</span>
+              </button>
+            </div>
+          </div>
+        `
+            : ''
+        }
       </section>
 
       <!-- Panel Derecho: Ticket, Verificador de Transferencias y Botón Gigante para el Pulgar -->
       <aside class="pos-ticket-panel ${st.mobileTicketOpen ? 'mobile-drawer-open' : ''}" aria-label="Ticket de venta">
         <header class="ticket-header">
-          <div>
-            <h2 class="ticket-title">Orden de Venta</h2>
+          <div class="ticket-header-title-wrap">
+            <div class="ticket-title-row">
+              <h2 class="ticket-title">Orden de Venta</h2>
+              ${itemsCount > 0 ? `<span class="status-badge badge-accent">${itemsCount}</span>` : ''}
+            </div>
             <span class="ticket-subtitle">Salida automática por lote (FEFO / FIFO)</span>
           </div>
           <div class="header-actions-group">
@@ -526,22 +598,214 @@ export function renderPOSViewHTML(st) {
 
 export function bindPOSViewEvents(root, refreshCatalogAndContext) {
   const searchInput = root.querySelector('#pos-search-input')
+  const clearSearchBtn = root.querySelector('#btn-pos-clear-search')
+  let activeKeyboardIndex = -1
+  let isConfirmingTrayAdd = false
 
-  searchInput?.addEventListener('input', (e) => {
-    const pos = e.target.selectionStart
-    setState({ posSearch: e.target.value })
-    const nextInput = document.querySelector('#pos-search-input')
-    if (nextInput) {
-      nextInput.focus()
-      const caret = pos != null ? pos : nextInput.value.length
-      nextInput.setSelectionRange(caret, caret)
+  function bindCatalogTiles() {
+    const tiles = root.querySelectorAll('[data-pos-tile]')
+    tiles.forEach((tile) => {
+      let touchStartX = 0
+      let touchStartY = 0
+      let wasSwipe = false
+
+      tile.addEventListener(
+        'touchstart',
+        (e) => {
+          if (!e.touches || !e.touches[0]) return
+          touchStartX = e.touches[0].clientX
+          touchStartY = e.touches[0].clientY
+          wasSwipe = false
+        },
+        { passive: true }
+      )
+
+      tile.addEventListener(
+        'touchmove',
+        (e) => {
+          if (!e.touches || !e.touches[0]) return
+          const dx = Math.abs(e.touches[0].clientX - touchStartX)
+          const dy = Math.abs(e.touches[0].clientY - touchStartY)
+          if (dx > 8 || dy > 8) {
+            wasSwipe = true
+          }
+        },
+        { passive: true }
+      )
+
+      tile.addEventListener('click', () => {
+        if (wasSwipe) {
+          wasSwipe = false
+          return
+        }
+        const pid = tile.getAttribute('data-pos-tile')
+        const st = getState()
+        const prod = (st.products || []).find((p) => p.id === pid)
+        if (!prod) return
+
+        const isMobile = window.matchMedia('(max-width: 900px)').matches
+        if (isMobile) {
+          // On mobile, tap selects the product and displays thumb-friendly confirmation tray
+          setState({ posSelectedProductId: pid, posSelectedQty: 1 })
+        } else {
+          // On desktop, click adds directly to cart
+          const res = addProductToCart(st.cart, prod, 1)
+          if (!res.ok) {
+            showToast('error', res.error)
+            return
+          }
+          currentOperationId = null
+          setState({ cart: res.cart })
+        }
+      })
+    })
+
+    activeKeyboardIndex = -1
+  }
+
+  function updateCatalogDom() {
+    const st = getState()
+    const allFiltered = getFilteredPOSProducts(st)
+    const scrollContainer = root.querySelector('.pos-catalog-scroll')
+    if (scrollContainer) {
+      scrollContainer.innerHTML = renderPOSCatalogContentHTML(
+        allFiltered,
+        st,
+        getUISettingsSync()
+      )
+      bindCatalogTiles()
+    }
+    if (clearSearchBtn) {
+      clearSearchBtn.style.display = st.posSearch ? 'inline-flex' : 'none'
+    }
+  }
+
+  bindCatalogTiles()
+
+  // Tray cancellation
+  root.querySelector('#btn-tray-cancel')?.addEventListener('click', () => {
+    setState({ posSelectedProductId: null, posSelectedQty: 1 })
+  })
+
+  // Tray quantity stepper
+  root.querySelector('#btn-tray-dec')?.addEventListener('click', () => {
+    const st = getState()
+    const prod = (st.products || []).find((p) => p.id === st.posSelectedProductId)
+    if (!prod) return
+    const step = getUnitStep(prod.unit)
+    const cur = st.posSelectedQty || 1
+    const next = Math.max(step, roundQty(cur - step, prod.unit))
+    setState({ posSelectedQty: next })
+  })
+
+  root.querySelector('#btn-tray-inc')?.addEventListener('click', () => {
+    const st = getState()
+    const prod = (st.products || []).find((p) => p.id === st.posSelectedProductId)
+    if (!prod) return
+    const step = getUnitStep(prod.unit)
+    const cur = st.posSelectedQty || 1
+    const next = roundQty(cur + step, prod.unit)
+    if (next > Number(prod.available_stock || 0)) {
+      showToast(
+        'error',
+        `Existencia máxima alcanzada para "${prod.name}" (${formatQty(prod.available_stock, prod.unit)}).`
+      )
+      return
+    }
+    setState({ posSelectedQty: next })
+  })
+
+  // Tray confirm add with double-tap protection
+  root.querySelector('#btn-tray-confirm-add')?.addEventListener('click', () => {
+    if (isConfirmingTrayAdd) return
+    isConfirmingTrayAdd = true
+    try {
+      const st = getState()
+      const prod = (st.products || []).find((p) => p.id === st.posSelectedProductId)
+      if (!prod) return
+      const qty = st.posSelectedQty || 1
+      const res = addProductToCart(st.cart, prod, qty)
+      if (!res.ok) {
+        showToast('error', res.error)
+      } else {
+        currentOperationId = null
+        showToast('ok', `Agregado al ticket: ${prod.name} (${formatQty(qty, prod.unit)})`, 2000)
+        setState({ cart: res.cart, posSelectedProductId: null, posSelectedQty: 1 })
+      }
+    } finally {
+      setTimeout(() => {
+        isConfirmingTrayAdd = false
+      }, 350)
     }
   })
 
+  // Live search without destroying searchInput DOM
+  searchInput?.addEventListener('input', (e) => {
+    const st = getState()
+    st.posSearch = e.target.value
+    updateCatalogDom()
+  })
+
+  // Keyboard navigation & desktop Enter add
   searchInput?.addEventListener('keydown', (e) => {
+    const isMobile = window.matchMedia('(max-width: 900px)').matches
+    const tiles = Array.from(root.querySelectorAll('.pos-product-tile:not([disabled])'))
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      if (tiles.length === 0) return
+      activeKeyboardIndex = (activeKeyboardIndex + 1) % tiles.length
+      tiles.forEach((t, i) => t.classList.toggle('is-keyboard-focus', i === activeKeyboardIndex))
+      tiles[activeKeyboardIndex]?.scrollIntoView({ block: 'nearest' })
+      return
+    }
+
+    if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      if (tiles.length === 0) return
+      if (activeKeyboardIndex <= 0) {
+        activeKeyboardIndex = -1
+        tiles.forEach((t) => t.classList.remove('is-keyboard-focus'))
+        searchInput.focus()
+      } else {
+        activeKeyboardIndex -= 1
+        tiles.forEach((t, i) => t.classList.toggle('is-keyboard-focus', i === activeKeyboardIndex))
+        tiles[activeKeyboardIndex]?.scrollIntoView({ block: 'nearest' })
+      }
+      return
+    }
+
     if (e.key === 'Enter') {
       e.preventDefault()
       const st = getState()
+
+      if (isMobile) {
+        // Mobile Enter: blur keyboard, never auto-add
+        searchInput.blur()
+        const filtered = getFilteredPOSProducts(st)
+        if (filtered.length === 1) {
+          setState({ posSelectedProductId: filtered[0].id, posSelectedQty: 1 })
+        }
+        return
+      }
+
+      // Desktop Enter
+      if (activeKeyboardIndex >= 0 && tiles[activeKeyboardIndex]) {
+        const pid = tiles[activeKeyboardIndex].getAttribute('data-pos-tile')
+        const prod = (st.products || []).find((p) => p.id === pid)
+        if (prod) {
+          const res = addProductToCart(st.cart, prod, 1)
+          if (!res.ok) {
+            showToast('error', res.error)
+          } else {
+            showToast('ok', `Agregado: ${prod.name}`, 1500)
+            currentOperationId = null
+            setState({ cart: res.cart })
+          }
+        }
+        return
+      }
+
       const q = String(st.posSearch || '').trim().toLowerCase()
       if (!q) return
 
@@ -564,10 +828,31 @@ export function bindPOSViewEvents(root, refreshCatalogAndContext) {
         showToast('error', res.error)
       } else {
         currentOperationId = null
+        showToast('ok', `Agregado: ${target.name}`, 1500)
+        st.posSearch = ''
+        if (searchInput) searchInput.value = ''
         setState({ cart: res.cart, posSearch: '' })
       }
-      document.querySelector('#pos-search-input')?.focus()
     }
+  })
+
+  clearSearchBtn?.addEventListener('click', () => {
+    const st = getState()
+    st.posSearch = ''
+    if (searchInput) {
+      searchInput.value = ''
+      searchInput.focus()
+    }
+    updateCatalogDom()
+    setState({ posSearch: '' }, false)
+  })
+
+  root.querySelector('#btn-pos-reset-filters')?.addEventListener('click', () => {
+    const st = getState()
+    st.posSearch = ''
+    if (searchInput) searchInput.value = ''
+    setState({ posSearch: '', posCategory: 'ALL', posVisibleLimit: 60 })
+    document.querySelector('#pos-search-input')?.focus()
   })
 
   root.querySelector('#btn-empty-pos-create-first')?.addEventListener('click', () => {
@@ -650,22 +935,6 @@ export function bindPOSViewEvents(root, refreshCatalogAndContext) {
   root.querySelectorAll('[data-pos-cat]').forEach((btn) => {
     btn.addEventListener('click', () => {
       setState({ posCategory: btn.getAttribute('data-pos-cat'), posVisibleLimit: 60 })
-    })
-  })
-
-  root.querySelectorAll('[data-pos-add]').forEach((tile) => {
-    tile.addEventListener('click', () => {
-      const pid = tile.getAttribute('data-pos-add')
-      const st = getState()
-      const prod = st.products.find((p) => p.id === pid)
-      if (!prod) return
-      const res = addProductToCart(st.cart, prod, 1)
-      if (!res.ok) {
-        showToast('error', res.error)
-        return
-      }
-      currentOperationId = null
-      setState({ cart: res.cart })
     })
   })
 

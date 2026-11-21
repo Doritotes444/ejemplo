@@ -2,15 +2,19 @@ import { isOwner } from '../core/permissions.js'
 import { getTheme, toggleTheme } from '../core/theme.js'
 import { navigateTo } from '../core/router.js'
 import { logoutSession } from '../core/session.js'
-import { getState, setState, calculateCartTotals } from '../state.js'
+import { getState, setState, calculateCartTotals, dismissToast } from '../state.js'
 import {
   computeOwnerQuickMetrics,
   getStoredProfileSync,
   getUISettingsSync,
   saveUISettingsSync,
+  getStoredNotificationsSync,
+  markNotificationReadSync,
+  markAllNotificationsReadSync,
+  getUnreadNotificationsCountSync,
 } from '../core/localStore.js'
 import { formatCOP } from '../utils/money.js'
-import { BRAND_LOGO_SVG, icon } from './icons.js'
+import { BRAND_LOGO_SVG, BRAND_MARK_SVG, icon } from './icons.js'
 import { closeDialog } from './dialog.js'
 import { renderAuthScreen } from './login.js'
 import {
@@ -36,19 +40,19 @@ import { renderSettingsViewHTML, bindSettingsViewEvents } from './settings.js'
 import { renderInteractiveTourHTML, bindInteractiveTourEvents } from './tour.js'
 
 const OWNER_NAV_ITEMS = [
-  { id: 'pos', label: 'Punto de Venta', iconName: 'pos' },
-  { id: 'products', label: 'Productos', iconName: 'products' },
-  { id: 'lots', label: 'Lotes (FEFO)', iconName: 'lots' },
-  { id: 'inventory', label: 'Inventario / Kardex', iconName: 'inventory' },
-  { id: 'sales', label: 'Ventas', iconName: 'sales' },
-  { id: 'reviews', label: 'Muro de Reseñas', iconName: 'star' },
-  { id: 'users', label: 'Usuarios', iconName: 'users' },
-  { id: 'settings', label: 'Ajustes', iconName: 'settings' },
+  { id: 'pos', label: 'Punto de Venta', mobileLabel: 'Caja POS', iconName: 'pos' },
+  { id: 'products', label: 'Productos', mobileLabel: 'Productos', iconName: 'products' },
+  { id: 'lots', label: 'Lotes (FEFO)', mobileLabel: 'Lotes', iconName: 'lots' },
+  { id: 'inventory', label: 'Inventario / Kardex', mobileLabel: 'Kardex', iconName: 'inventory' },
+  { id: 'sales', label: 'Ventas', mobileLabel: 'Ventas', iconName: 'sales' },
+  { id: 'reviews', label: 'Muro de Reseñas', mobileLabel: 'Reseñas', iconName: 'star' },
+  { id: 'users', label: 'Usuarios', mobileLabel: 'Usuarios', iconName: 'users' },
+  { id: 'settings', label: 'Ajustes', mobileLabel: 'Ajustes', iconName: 'settings' },
 ]
 
 const TENDERO_NAV_ITEMS = [
-  { id: 'pos', label: 'Terminal POS', iconName: 'pos' },
-  { id: 'reviews', label: 'Muro de Reseñas', iconName: 'star' },
+  { id: 'pos', label: 'Terminal POS', mobileLabel: 'Caja POS', iconName: 'pos' },
+  { id: 'reviews', label: 'Muro de Reseñas', mobileLabel: 'Reseñas', iconName: 'star' },
 ]
 
 function escapeHTML(str) {
@@ -62,64 +66,63 @@ function escapeHTML(str) {
 function renderOwnerQuickMetricsStrip(st) {
   if (!isOwner(st.user)) return ''
   const metrics = computeOwnerQuickMetrics(st.products || [], st.sales || [])
-  const store = st.storeProfile || getStoredProfileSync()
 
   return `
-    <section id="owner-quick-metrics" class="owner-metrics-banner" aria-label="Métricas Rápidas del Dueño">
-      <div class="owner-store-summary">
-        <div class="store-badge-icon">${icon('store', 16)}</div>
-        <div>
-          <strong class="store-title-text">${escapeHTML(store?.store_name || 'Mi Establecimiento')}</strong>
-          <div class="store-meta-text">
-            <span>NIT: ${escapeHTML(store?.nit || '—')}</span>
-            <span>·</span>
-            <span>${escapeHTML(store?.address || '')} (${escapeHTML(store?.neighborhood || '')})</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="owner-kpi-grid">
-        <div class="kpi-pill">
-          <div class="kpi-top">
-            <span class="kpi-label">Ventas del Día</span>
-            <span class="status-badge badge-success">${metrics.today_sales_count} ops</span>
-          </div>
-          <strong class="kpi-value">${formatCOP(metrics.today_sales_total)}</strong>
-          <span class="kpi-sub">${metrics.verified_transfers_count} transferencia(s) verificadas con cámara</span>
+    <section id="owner-quick-metrics" class="owner-metrics-banner" aria-label="Resumen operativo del día">
+      <div class="owner-status-row">
+        <div class="owner-stat-item">
+          <span class="owner-stat-label">Hoy</span>
+          <strong class="owner-stat-val num">${formatCOP(metrics.today_sales_total)}</strong>
+          <span class="status-badge badge-neutral">${metrics.today_sales_count} ${metrics.today_sales_count === 1 ? 'venta' : 'ventas'}</span>
         </div>
 
-        <div class="kpi-pill">
-          <div class="kpi-top">
-            <span class="kpi-label">Producto Más Vendido</span>
-            ${icon('trending', 14, 'text-success')}
-          </div>
-          <strong class="kpi-value kpi-truncate" title="${escapeHTML(metrics.top_product.name)}">
-            ${escapeHTML(metrics.top_product.name)}
+        <span class="owner-stat-sep hide-on-sm" aria-hidden="true"></span>
+
+        <div class="owner-stat-item hide-on-sm">
+          <span class="owner-stat-label">Más vendido</span>
+          <strong class="owner-stat-val owner-stat-truncate" title="${escapeHTML(metrics.top_product.name)}">
+            ${metrics.top_product.quantity > 0 ? escapeHTML(metrics.top_product.name) : 'Sin ventas hoy'}
           </strong>
-          <span class="kpi-sub">
+        </div>
+
+        <button
+          type="button"
+          class="owner-stock-alert-btn ${metrics.low_stock_count > 0 ? 'has-alert' : ''}"
+          id="btn-kpi-go-lowstock"
+        >
+          ${metrics.low_stock_count > 0 ? icon('alert', 14) : icon('check', 14)}
+          <span>
             ${
-              metrics.top_product.quantity > 0
-                ? `${metrics.top_product.quantity} und vendidas · ${formatCOP(metrics.top_product.revenue)}`
-                : 'Registra una venta en el POS para calcular rotación'
+              metrics.low_stock_count > 0
+                ? `${metrics.low_stock_count} stock bajo${metrics.out_of_stock_count > 0 ? ` (${metrics.out_of_stock_count} agot.)` : ''}`
+                : 'Stock al día'
             }
           </span>
-        </div>
-
-        <div class="kpi-pill ${metrics.low_stock_count > 0 ? 'kpi-pill-warning' : ''}">
-          <div class="kpi-top">
-            <span class="kpi-label">Alerta de Bajo Stock</span>
-            <button type="button" class="btn-link-xs" id="btn-kpi-go-lowstock">Ver detalle →</button>
-          </div>
-          <strong class="kpi-value ${metrics.low_stock_count > 0 ? 'text-warning' : ''}">
-            ${metrics.low_stock_count} productos
-          </strong>
-          <span class="kpi-sub">
-            ${metrics.out_of_stock_count} agotados · ${(st.products || []).length} en catálogo
-          </span>
-        </div>
+          <span class="owner-alert-arrow" aria-hidden="true">→</span>
+        </button>
       </div>
     </section>
   `
+}
+
+function formatNotifTime(isoStr) {
+  if (!isoStr) return ''
+  try {
+    const d = new Date(isoStr)
+    const now = new Date()
+    const diffSec = Math.floor((now.getTime() - d.getTime()) / 1000)
+    if (diffSec < 60) return 'Hace un momento'
+    if (diffSec < 3600) return `Hace ${Math.floor(diffSec / 60)} min`
+    return d.toLocaleString('es-CO', {
+      day: 'numeric',
+      month: 'short',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    })
+  } catch {
+    return isoStr
+  }
 }
 
 export function renderAppShell(root, { onAuthenticated, onLogout, refreshAll }) {
@@ -146,6 +149,8 @@ export function renderAppShell(root, { onAuthenticated, onLogout, refreshAll }) 
   const activeRoute = st.route || 'pos'
   const store = st.storeProfile || getStoredProfileSync()
   const ui = getUISettingsSync()
+  const unreadNotifsCount = getUnreadNotificationsCountSync(st.user.role)
+  const notificationsList = st.notificationsOpen ? getStoredNotificationsSync(st.user.role) : []
   const { total, itemsCount } = calculateCartTotals(st.cart)
 
   let viewContentHTML = ''
@@ -205,7 +210,7 @@ export function renderAppShell(root, { onAuthenticated, onLogout, refreshAll }) 
         </nav>
 
         <div class="sidebar-footer">
-          <div class="user-pill sidebar-user-pill">
+          <div class="sidebar-user-block">
             <span class="user-role-dot ${owner ? 'dot-owner' : 'dot-tendero'}"></span>
             <div class="sidebar-user-info">
               <span class="user-name">${escapeHTML(st.user.full_name)}</span>
@@ -218,7 +223,7 @@ export function renderAppShell(root, { onAuthenticated, onLogout, refreshAll }) 
               type="button"
               class="btn-icon"
               id="btn-sidebar-theme"
-              title="Cambiar modo claro / oscuro"
+              title="${theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}"
               aria-label="Cambiar tema"
             >
               ${theme === 'dark' ? icon('sun', 16) : icon('moon', 16)}
@@ -296,17 +301,29 @@ export function renderAppShell(root, { onAuthenticated, onLogout, refreshAll }) 
             `
                 : ''
             }
-            <a href="#/pos" class="header-brand mobile-only-brand" aria-label="TiendApp">
-              ${BRAND_LOGO_SVG}
+            <a href="#/pos" class="header-brand mobile-only-brand" aria-label="Kairo Inicio">
+              ${BRAND_MARK_SVG}
+              <span class="mobile-brand-title">${escapeHTML(activeNavMeta.mobileLabel || activeNavMeta.label)}</span>
             </a>
             <div class="desktop-route-crumb">
-              ${icon(activeNavMeta.iconName, 15)}
+              ${icon(activeNavMeta.iconName, 16)}
               <span>${escapeHTML(activeNavMeta.label)}</span>
-              ${activeRoute === 'pos' ? '<kbd class="kbd-hint">/</kbd><span class="crumb-hint">Buscar</span><kbd class="kbd-hint">F2</kbd><span class="crumb-hint">Cobrar</span>' : ''}
+              ${activeRoute === 'pos' ? '<span class="header-shortcuts"><kbd class="kbd-hint">/</kbd><span class="crumb-hint">Buscar</span><kbd class="kbd-hint">F2</kbd><span class="crumb-hint">Cobrar</span></span>' : ''}
             </div>
           </div>
 
           <div class="header-right">
+            <button
+              type="button"
+              class="btn-icon btn-header-notif ${unreadNotifsCount > 0 ? 'has-unread' : ''}"
+              id="btn-header-notifications"
+              title="Notificaciones (${unreadNotifsCount} no leídas)"
+              aria-label="Abrir panel de notificaciones"
+            >
+              ${icon('bell', 16)}
+              ${unreadNotifsCount > 0 ? `<span class="notif-badge">${unreadNotifsCount > 9 ? '9+' : unreadNotifsCount}</span>` : ''}
+            </button>
+
             <button
               type="button"
               class="btn-icon"
@@ -317,18 +334,101 @@ export function renderAppShell(root, { onAuthenticated, onLogout, refreshAll }) 
               ${theme === 'dark' ? icon('sun', 16) : icon('moon', 16)}
             </button>
 
-            <div class="user-pill">
+            <div class="user-pill mobile-only-user-pill">
               <span class="user-role-dot ${owner ? 'dot-owner' : 'dot-tendero'}"></span>
-              <span class="user-name">${escapeHTML(st.user.full_name)}</span>
-              <span class="user-role-tag">${escapeHTML(st.user.role_name)}</span>
+              <span class="user-role-compact">${escapeHTML(st.user.role_name)}</span>
             </div>
 
-            <button type="button" class="btn btn-ghost btn-sm" id="btn-header-logout" title="Cambiar usuario o salir">
-              ${icon('logout', 15)}
-              <span class="hide-on-xs">Salir</span>
+            <button type="button" class="btn-icon mobile-only-logout" id="btn-header-logout" title="Cerrar sesión" aria-label="Cerrar sesión">
+              ${icon('logout', 16)}
             </button>
           </div>
         </header>
+
+        ${
+          st.notificationsOpen
+            ? `
+          <div class="notification-drawer-backdrop" id="notification-drawer-backdrop">
+            <aside class="notification-drawer" id="notification-drawer" role="dialog" aria-modal="true" aria-label="Historial de notificaciones">
+              <div class="notif-drawer-header">
+                <div class="notif-drawer-title-row">
+                  ${icon('bell', 17)}
+                  <h3 class="notif-drawer-title">Notificaciones</h3>
+                  ${unreadNotifsCount > 0 ? `<span class="status-badge badge-warning">${unreadNotifsCount} no leídas</span>` : ''}
+                </div>
+                <div class="notif-drawer-actions">
+                  ${
+                    unreadNotifsCount > 0
+                      ? `
+                    <button type="button" class="btn btn-outline btn-xs" id="btn-notif-mark-all-read">
+                      Marcar todas leídas
+                    </button>
+                  `
+                      : ''
+                  }
+                  <button type="button" class="btn-icon" id="btn-close-notif-drawer" aria-label="Cerrar notificaciones">
+                    ${icon('close', 16)}
+                  </button>
+                </div>
+              </div>
+
+              <div class="notif-drawer-body">
+                ${
+                  notificationsList.length === 0
+                    ? `
+                  <div class="notif-empty-state">
+                    <div class="notif-empty-icon">${icon('bell', 24)}</div>
+                    <p class="notif-empty-title">Sin notificaciones pendientes</p>
+                    <p class="notif-empty-sub">Las alertas de ventas, stock y lotes se registrarán aquí.</p>
+                  </div>
+                `
+                    : notificationsList
+                        .map(
+                          (n) => `
+                      <article class="notif-card notif-${escapeHTML(n.type)} ${n.read ? 'is-read' : 'is-unread'}">
+                        <div class="notif-card-lead">
+                          <span class="notif-icon notif-icon-${escapeHTML(n.type)}">
+                            ${icon(n.type === 'ok' ? 'check' : n.type === 'error' || n.type === 'warning' ? 'alert' : 'info', 14)}
+                          </span>
+                        </div>
+                        <div class="notif-card-main">
+                          <div class="notif-card-header">
+                            <h4 class="notif-card-title">${escapeHTML(n.title)}</h4>
+                            <time class="notif-card-time">${formatNotifTime(n.created_at)}</time>
+                          </div>
+                          <p class="notif-card-msg">${escapeHTML(n.message)}</p>
+                          <div class="notif-card-footer">
+                            ${
+                              n.action_route && (owner || n.action_route === 'pos')
+                                ? `
+                              <button type="button" class="btn-link-xs" data-notif-route="${escapeHTML(n.action_route)}">
+                                Ir a ${escapeHTML(n.action_route)} →
+                              </button>
+                            `
+                                : ''
+                            }
+                            ${
+                              !n.read
+                                ? `
+                              <button type="button" class="btn btn-ghost btn-xs" data-notif-mark-read="${escapeHTML(n.id)}">
+                                Marcar como leída
+                              </button>
+                            `
+                                : ''
+                            }
+                          </div>
+                        </div>
+                      </article>
+                    `
+                        )
+                        .join('')
+                }
+              </div>
+            </aside>
+          </div>
+        `
+            : ''
+        }
 
         ${owner ? renderInteractiveTourHTML(st) : ''}
         ${owner ? renderOwnerQuickMetricsStrip(st) : ''}
@@ -336,8 +436,9 @@ export function renderAppShell(root, { onAuthenticated, onLogout, refreshAll }) 
         ${
           st.toast
             ? `
-          <div class="toast-notification toast-${st.toast.type}" role="status" aria-live="polite">
-            <span>${escapeHTML(st.toast.message)}</span>
+          <div class="toast-notification toast-${escapeHTML(st.toast.type)}" role="status" aria-live="polite">
+            <span class="toast-icon">${icon(st.toast.type === 'ok' ? 'check' : st.toast.type === 'error' || st.toast.type === 'warning' ? 'alert' : 'info', 14)}</span>
+            <span class="toast-msg">${escapeHTML(st.toast.message)}</span>
             <button type="button" class="btn-icon btn-icon-subtle" id="btn-close-toast" aria-label="Cerrar notificación">
               ${icon('close', 14)}
             </button>
@@ -500,9 +601,46 @@ export function renderAppShell(root, { onAuthenticated, onLogout, refreshAll }) 
   root.querySelector('#btn-bottom-logout')?.addEventListener('click', handleDoLogout)
   root.querySelector('#btn-drawer-logout')?.addEventListener('click', handleDoLogout)
 
-  root.querySelector('#btn-close-toast')?.addEventListener('click', () => {
-    setState({ toast: null })
+  root.querySelector('#btn-header-notifications')?.addEventListener('click', () => {
+    setState({ notificationsOpen: !getState().notificationsOpen })
   })
+
+  root.querySelector('#btn-close-notif-drawer')?.addEventListener('click', () => {
+    setState({ notificationsOpen: false })
+  })
+
+  root.querySelector('#notification-drawer-backdrop')?.addEventListener('click', (e) => {
+    if (e.target.id === 'notification-drawer-backdrop') {
+      setState({ notificationsOpen: false })
+    }
+  })
+
+  root.querySelector('#btn-notif-mark-all-read')?.addEventListener('click', () => {
+    const cur = getState()
+    markAllNotificationsReadSync(cur.user?.role)
+    setState({})
+  })
+
+  root.querySelectorAll('[data-notif-mark-read]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-notif-mark-read')
+      markNotificationReadSync(id)
+      setState({})
+    })
+  })
+
+  root.querySelectorAll('[data-notif-route]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const targetRoute = btn.getAttribute('data-notif-route')
+      setState({ notificationsOpen: false })
+      navigateTo(targetRoute)
+    })
+  })
+
+  root.querySelector('#btn-close-toast')?.addEventListener('click', () => {
+    dismissToast()
+  })
+
 
   if (owner) {
     bindInteractiveTourEvents(root, refreshAll)

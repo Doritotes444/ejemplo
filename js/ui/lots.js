@@ -19,6 +19,8 @@ import { getTodayISO } from '../utils/validation.js'
 import { icon } from './icons.js'
 import { openDialog, closeDialog } from './dialog.js'
 import { openSaleReceiptModal } from './receipt.js'
+import { startCameraBarcodeReader } from './hardware.js'
+import { filterAndRankProducts } from '../utils/search.js'
 
 const UNITS = [
   { code: 'und', label: 'Unidad (und)' },
@@ -124,35 +126,40 @@ export function renderProductsViewHTML(st) {
     (p) => p.is_active && Number(p.expiring_soon_count || 0) > 0
   ).length
 
-  const filtered = allProducts.filter((p) => {
+  const preFiltered = allProducts.filter((p) => {
     if (!showInactive && !p.is_active) return false
     if (catFilter !== 'ALL' && String(p.category_id || '') !== String(catFilter)) return false
     const avail = Number(p.available_stock || 0)
     if (stockFilter === 'LOW' && !(avail > 0 && p.is_low_stock)) return false
     if (stockFilter === 'OUT' && avail > 0) return false
     if (stockFilter === 'EXPIRING' && !(Number(p.expiring_soon_count || 0) > 0)) return false
-    if (!q) return true
-    return (
-      String(p.name || '').toLowerCase().includes(q) ||
-      String(p.sku || '').toLowerCase().includes(q) ||
-      String(p.barcode || '').toLowerCase().includes(q)
-    )
+    return true
   })
+
+  const filtered = filterAndRankProducts(preFiltered, q)
+
+
+  const hasActiveFilters = Boolean(q || catFilter !== 'ALL' || stockFilter !== 'ALL')
 
   const rowsHTML =
     filtered.length === 0
       ? `<tr><td colspan="7" class="empty-cell">
           <p class="empty-title">${allProducts.length === 0 ? 'Aún no tienes productos en el catálogo' : 'No hay productos que coincidan con el filtro'}</p>
           <p class="empty-subtitle">${allProducts.length === 0 ? 'Usa "+ Nuevo Producto" para registrar tu primer artículo en segundos.' : 'Prueba limpiando el buscador o cambiando el filtro de categoría o stock.'}</p>
+          ${
+            hasActiveFilters
+              ? `<button type="button" class="btn btn-outline btn-sm empty-action-btn" id="btn-prod-reset-filters">Limpiar filtros</button>`
+              : ''
+          }
         </td></tr>`
       : filtered
           .map((p) => {
             const avail = Number(p.available_stock || 0)
             let stockBadge = `<span class="status-badge badge-success">${formatQty(avail, p.unit)}</span>`
             if (avail <= 0) {
-              stockBadge = `<span class="status-badge badge-danger">Agotado (0)</span>`
+              stockBadge = `<span class="status-badge badge-danger">${icon('alert', 12)} Agotado (0)</span>`
             } else if (p.is_low_stock) {
-              stockBadge = `<span class="status-badge badge-warning">Bajo (${formatQty(avail, p.unit)})</span>`
+              stockBadge = `<span class="status-badge badge-warning">${icon('alert', 12)} Bajo (${formatQty(avail, p.unit)})</span>`
             }
 
             const imgSrc =
@@ -165,7 +172,7 @@ export function renderProductsViewHTML(st) {
 
             return `
               <tr class="${!p.is_active ? 'row-inactive' : ''}">
-                <td class="mono">
+                <td class="mono cell-nowrap">
                   <strong>${escapeHTML(p.sku)}</strong>
                   ${p.barcode ? `<div class="cell-sub">${escapeHTML(p.barcode)}</div>` : '<div class="cell-sub">Sin EAN</div>'}
                 </td>
@@ -180,25 +187,25 @@ export function renderProductsViewHTML(st) {
                       onerror="window.handleProductImageError && window.handleProductImageError(this)"
                     />
                     <div class="table-prod-info">
-                      <strong>${escapeHTML(p.name)}</strong>
+                      <strong class="table-prod-name">${escapeHTML(p.name)}</strong>
                       ${p.description ? `<div class="cell-sub cell-truncate" title="${escapeHTML(p.description)}">${escapeHTML(p.description)}</div>` : ''}
                     </div>
                   </div>
                 </td>
-                <td>${escapeHTML(p.category_name || 'Sin categoría')}</td>
-                <td class="num">
-                  <strong>${formatCOP(p.sale_price)}</strong> <small class="text-muted">/ ${escapeHTML(p.unit)}</small>
+                <td class="cell-nowrap">${escapeHTML(p.category_name || 'Sin categoría')}</td>
+                <td class="num cell-nowrap">
+                  <div><strong>${formatCOP(p.sale_price)}</strong> <small class="text-muted">/ ${escapeHTML(p.unit)}</small></div>
                   ${
                     hasCost
                       ? `<div class="cell-sub">Costo ${formatCOP(p.unit_cost)} · <span class="${marginPct < 0 ? 'text-danger' : 'text-success'}">${marginPct}%</span></div>`
                       : ''
                   }
                 </td>
-                <td>
+                <td class="cell-nowrap">
                   ${stockBadge}
-                  <div class="cell-sub">Mínimo: ${p.min_stock} ${escapeHTML(p.unit)}${p.expiring_soon_count ? ` · <span class="text-warning">${p.expiring_soon_count} lote(s) por vencer</span>` : ''}</div>
+                  <div class="cell-sub">Mín: ${p.min_stock} ${escapeHTML(p.unit)}${p.expiring_soon_count ? ` · <span class="text-warning">${p.expiring_soon_count} por vencer</span>` : ''}</div>
                 </td>
-                <td>
+                <td class="cell-nowrap">
                   <span class="status-badge ${p.is_active ? 'badge-neutral' : 'badge-danger'}">
                     ${p.is_active ? 'Activo' : 'Inactivo'}
                   </span>
@@ -210,7 +217,7 @@ export function renderProductsViewHTML(st) {
                   <button type="button" class="btn btn-outline btn-xs" data-prod-edit="${p.id}" title="Editar información comercial">
                     ${icon('edit', 12)} Editar
                   </button>
-                  <button type="button" class="btn btn-ghost btn-xs" data-prod-duplicate="${p.id}" title="Duplicar producto para crear otra presentación">
+                  <button type="button" class="btn btn-ghost btn-xs" data-prod-duplicate="${p.id}" title="Duplicar producto" aria-label="Duplicar ${escapeHTML(p.name)}">
                     ${icon('copy', 12)}
                   </button>
                   <button type="button" class="btn btn-ghost btn-xs" data-prod-toggle="${p.id}">
@@ -249,7 +256,14 @@ export function renderProductsViewHTML(st) {
             type="search"
             value="${escapeHTML(st.productSearch)}"
             placeholder="Filtrar por nombre, SKU o código de barras..."
+            autocomplete="off"
+            aria-label="Buscar producto"
           />
+          ${
+            st.productSearch
+              ? `<button type="button" class="search-clear-btn" id="btn-prod-clear-search" aria-label="Limpiar búsqueda">${icon('close', 14)}</button>`
+              : ''
+          }
         </div>
         <select id="prod-cat-select" class="select-compact" aria-label="Filtrar por categoría">
           <option value="ALL">Todas las categorías</option>
@@ -315,6 +329,11 @@ export function bindProductsViewEvents(root, refreshAll) {
     }
   })
 
+  root.querySelector('#btn-prod-clear-search')?.addEventListener('click', () => {
+    setState({ productSearch: '' })
+    document.querySelector('#prod-search-input')?.focus()
+  })
+
   root.querySelector('#prod-cat-select')?.addEventListener('change', (e) => {
     setState({ productCategoryFilter: e.target.value })
   })
@@ -327,6 +346,10 @@ export function bindProductsViewEvents(root, refreshAll) {
     btn.addEventListener('click', () => {
       setState({ productStockFilter: btn.getAttribute('data-prod-stock') || 'ALL' })
     })
+  })
+
+  root.querySelector('#btn-prod-reset-filters')?.addEventListener('click', () => {
+    setState({ productSearch: '', productCategoryFilter: 'ALL', productStockFilter: 'ALL' })
   })
 
   root.querySelector('#btn-new-category')?.addEventListener('click', () => {
@@ -473,6 +496,18 @@ export function openProductFormModal(product = null, refreshAll, options = {}) {
 
   const initialMargin = computeMarginStats(initialPrice, initialCost)
 
+  let activeCameraScanner = null
+  async function stopCameraIfRunning() {
+    if (activeCameraScanner) {
+      try {
+        await activeCameraScanner.stop()
+      } catch {
+        // ignore
+      }
+      activeCameraScanner = null
+    }
+  }
+
   openDialog({
     title: isEdit
       ? `Editar Producto · ${escapeHTML(product.sku)}`
@@ -483,6 +518,9 @@ export function openProductFormModal(product = null, refreshAll, options = {}) {
       ? 'Actualiza los datos comerciales sin alterar ventas históricas ni lotes registrados.'
       : 'Alta rápida: solo Nombre y Precio son obligatorios. Los detalles de lote, código e imagen son opcionales.',
     maxWidth: '620px',
+    onClose: () => {
+      stopCameraIfRunning()
+    },
     bodyHTML: `
       <form id="form-product" class="form-stack product-form-modern" novalidate>
         <!-- SECCIÓN 1: ALTA RÁPIDA (ESENCIALES) -->
@@ -651,7 +689,12 @@ export function openProductFormModal(product = null, refreshAll, options = {}) {
               </div>
 
               <div class="form-field">
-                <label for="p-barcode">Código de barras (EAN / UPC)</label>
+                <div class="label-with-action">
+                  <label for="p-barcode">Código de barras (EAN / UPC)</label>
+                  <button type="button" class="btn-link-xs" id="btn-scan-product-barcode">
+                    ${icon('barcode', 13)} <span>Escanear código</span>
+                  </button>
+                </div>
                 <input
                   id="p-barcode"
                   type="text"
@@ -660,6 +703,21 @@ export function openProductFormModal(product = null, refreshAll, options = {}) {
                   autocomplete="off"
                 />
                 <span class="field-error" id="err-p-barcode" hidden></span>
+              </div>
+            </div>
+
+            <!-- Visor de Escaneo con Cámara Trasera -->
+            <div id="pf-camera-scanner-dock" class="pf-camera-scanner-dock" style="display: none;">
+              <div class="pf-scanner-preview-wrapper">
+                <div id="pf-barcode-camera-reader" class="barcode-reader-box"></div>
+                <div id="pf-scanner-status-bar" class="scanner-status-bar">
+                  <span>Iniciando cámara trasera (html5-qrcode)...</span>
+                </div>
+              </div>
+              <div class="pf-scanner-actions">
+                <button type="button" class="btn btn-ghost btn-xs" id="btn-cancel-pf-scan">
+                  ${icon('close', 13)} <span>Cancelar escaneo</span>
+                </button>
               </div>
             </div>
 
@@ -810,15 +868,21 @@ export function openProductFormModal(product = null, refreshAll, options = {}) {
         marginPill.textContent = m.text
       }
 
+      function showFormAlert(msg) {
+        errBox.innerHTML = `${icon('alert', 15)}<span>${escapeHTML(msg)}</span>`
+        errBox.hidden = false
+      }
+
       function clearFieldErrors() {
         errBox.hidden = true
-        errBox.textContent = ''
+        errBox.innerHTML = ''
         modal.querySelectorAll('.field-error').forEach((el) => {
           el.hidden = true
           el.textContent = ''
         })
         modal.querySelectorAll('[aria-invalid="true"]').forEach((el) => {
           el.removeAttribute('aria-invalid')
+          el.removeAttribute('aria-describedby')
         })
       }
 
@@ -828,9 +892,12 @@ export function openProductFormModal(product = null, refreshAll, options = {}) {
         if (inSecondary && detailsEl) {
           detailsEl.open = true
         }
-        if (input) input.setAttribute('aria-invalid', 'true')
+        if (input) {
+          input.setAttribute('aria-invalid', 'true')
+          if (errSpan) input.setAttribute('aria-describedby', errSpan.id)
+        }
         if (errSpan) {
-          errSpan.textContent = msg
+          errSpan.innerHTML = `${icon('alert', 12)}<span>${escapeHTML(msg)}</span>`
           errSpan.hidden = false
         }
         return input
@@ -860,6 +927,58 @@ export function openProductFormModal(product = null, refreshAll, options = {}) {
           refreshPreview()
         }
       })
+
+      // Escáner de código de barras con cámara trasera
+      const scannerDock = modal.querySelector('#pf-camera-scanner-dock')
+      const statusBar = modal.querySelector('#pf-scanner-status-bar')
+
+      modal.querySelector('#btn-scan-product-barcode')?.addEventListener('click', () => {
+        if (detailsEl) {
+          detailsEl.open = true
+        }
+        if (scannerDock) {
+          scannerDock.style.display = 'block'
+        }
+        if (statusBar) {
+          statusBar.textContent = 'Solicitando acceso a la cámara trasera...'
+        }
+
+        const onDetectedHandler = (decodedCode) => {
+          const cleanCode = String(decodedCode ?? '').trim()
+          if (barcodeInput) {
+            barcodeInput.value = cleanCode
+            barcodeInput.focus()
+            barcodeInput.classList.add('input-highlight-pulse')
+            setTimeout(() => barcodeInput.classList.remove('input-highlight-pulse'), 1500)
+          }
+          if (scannerDock) scannerDock.style.display = 'none'
+          activeCameraScanner = null
+          window.__triggerProductBarcodeScan = null
+          showToast('ok', `Código "${cleanCode}" capturado. Puedes editarlo antes de guardar.`)
+        }
+
+        window.__triggerProductBarcodeScan = onDetectedHandler
+
+        activeCameraScanner = startCameraBarcodeReader({
+          elementId: 'pf-barcode-camera-reader',
+          statusBarEl: statusBar,
+          onDetected: onDetectedHandler,
+          onError: (err) => {
+            showToast(
+              'error',
+              `Cámara no disponible (${err?.message || 'sin permisos'}). Ingresa el código manualmente.`
+            )
+            if (barcodeInput) barcodeInput.focus()
+          },
+        })
+      })
+
+      modal.querySelector('#btn-cancel-pf-scan')?.addEventListener('click', async () => {
+        await stopCameraIfRunning()
+        if (scannerDock) scannerDock.style.display = 'none'
+        if (barcodeInput) barcodeInput.focus()
+      })
+
 
       // Crear categoría inline sin cerrar ni perder datos del producto
       const inlineCatBox = modal.querySelector('#inline-cat-box')
@@ -989,8 +1108,7 @@ export function openProductFormModal(product = null, refreshAll, options = {}) {
         }
 
         if (firstInvalid) {
-          errBox.textContent = 'Revisa los campos marcados en rojo antes de guardar.'
-          errBox.hidden = false
+          showFormAlert('Revisa los campos marcados antes de guardar. Tus datos escritos se conservan.')
           firstInvalid.focus()
           return
         }
@@ -1050,8 +1168,7 @@ export function openProductFormModal(product = null, refreshAll, options = {}) {
         } catch (err) {
           // Conservar todos los datos escritos y enfocar el campo relacionado si aplica
           const msg = err.message || 'No se pudo guardar el producto.'
-          errBox.textContent = msg
-          errBox.hidden = false
+          showFormAlert(msg)
           if (/SKU/i.test(msg)) {
             const el = setFieldError('p-sku', msg, true)
             el?.focus()
@@ -1140,35 +1257,45 @@ export function renderLotsViewHTML(st) {
   const totalExpiringSoon = lots.filter((l) => l.status === 'PROXIMO_A_VENCER').length
   const totalExpired = lots.filter((l) => l.status === 'VENCIDO').length
 
+  const hasLotFilters = statusFilter !== 'ALL' || prodFilter !== 'ALL'
+
   const rowsHTML =
     filtered.length === 0
-      ? `<tr><td colspan="8" class="empty-cell">No se encontraron lotes para los criterios seleccionados.</td></tr>`
+      ? `<tr><td colspan="8" class="empty-cell">
+          <p class="empty-title">${lots.length === 0 ? 'Aún no hay lotes registrados' : 'No se encontraron lotes con estos filtros'}</p>
+          <p class="empty-subtitle">${lots.length === 0 ? 'Usa "Registrar Lote" para ingresar existencias y fechas de vencimiento.' : 'Cambia el producto o el estado de vencimiento para ver otros lotes.'}</p>
+          ${
+            hasLotFilters
+              ? `<button type="button" class="btn btn-outline btn-sm empty-action-btn" id="btn-lot-reset-filters">Limpiar filtros</button>`
+              : ''
+          }
+        </td></tr>`
       : filtered
           .map((l) => {
-            let badge = `<span class="status-badge badge-success">Disponible</span>`
+            let badge = `<span class="status-badge badge-success">${icon('check', 12)} Disponible</span>`
             if (l.status === 'VENCIDO') {
-              badge = `<span class="status-badge badge-danger">Vencido (Bloqueado)</span>`
+              badge = `<span class="status-badge badge-danger">${icon('alert', 12)} Vencido (Bloqueado)</span>`
             } else if (l.status === 'PROXIMO_A_VENCER') {
-              badge = `<span class="status-badge badge-warning">Vence en ${l.days_to_expire}d</span>`
+              badge = `<span class="status-badge badge-warning">${icon('calendar', 12)} Vence en ${l.days_to_expire}d</span>`
             } else if (l.status === 'AGOTADO') {
               badge = `<span class="status-badge badge-neutral">Agotado</span>`
             }
 
             return `
               <tr class="${l.status === 'VENCIDO' ? 'row-expired' : ''}">
-                <td class="mono"><strong>${escapeHTML(l.lot_number)}</strong></td>
+                <td class="mono cell-nowrap"><strong>${escapeHTML(l.lot_number)}</strong></td>
                 <td>
                   <strong>${escapeHTML(l.product_name)}</strong>
                   <div class="cell-sub">SKU: ${escapeHTML(l.product_sku)}</div>
                 </td>
-                <td>${escapeHTML(l.entry_date)}</td>
-                <td>${l.expiration_date ? escapeHTML(l.expiration_date) : '<span class="text-muted">No perecedero</span>'}</td>
-                <td class="num">${formatCOP(l.unit_cost)}</td>
-                <td class="num">
+                <td class="mono cell-nowrap">${escapeHTML(l.entry_date)}</td>
+                <td class="mono cell-nowrap">${l.expiration_date ? escapeHTML(l.expiration_date) : '<span class="text-muted">No perecedero</span>'}</td>
+                <td class="num cell-nowrap">${formatCOP(l.unit_cost)}</td>
+                <td class="num cell-nowrap">
                   <strong>${formatQty(l.available_quantity, l.product_unit)}</strong>
                   <div class="cell-sub">Inicial: ${l.initial_quantity}</div>
                 </td>
-                <td>${badge}</td>
+                <td class="cell-nowrap">${badge}</td>
                 <td class="actions-cell">
                   <button type="button" class="btn btn-outline btn-xs" data-lot-adjust="${l.id}">
                     Movimiento / Ajuste
@@ -1210,7 +1337,7 @@ export function renderLotsViewHTML(st) {
       </div>
 
       <div class="filter-toolbar">
-        <select id="lot-filter-product" class="select-compact">
+        <select id="lot-filter-product" class="select-compact" aria-label="Filtrar lotes por producto">
           <option value="ALL">Todos los productos</option>
           ${(st.products || [])
             .map(
@@ -1219,7 +1346,7 @@ export function renderLotsViewHTML(st) {
             .join('')}
         </select>
 
-        <div class="segmented-filter">
+        <div class="segmented-filter" role="tablist" aria-label="Filtrar lotes por estado">
           ${[
             { id: 'ALL', label: 'Todos' },
             { id: 'DISPONIBLE', label: 'Disponibles' },
@@ -1278,6 +1405,10 @@ export function bindLotsViewEvents(root, refreshAll) {
     btn.addEventListener('click', () => {
       setState({ lotFilterStatus: btn.getAttribute('data-lot-status') })
     })
+  })
+
+  root.querySelector('#btn-lot-reset-filters')?.addEventListener('click', () => {
+    setState({ lotFilterStatus: 'ALL', lotFilterProduct: 'ALL' })
   })
 
   root.querySelectorAll('[data-lot-adjust]').forEach((btn) => {
@@ -1515,7 +1646,10 @@ export function renderInventoryViewHTML(st) {
 
   const movRows =
     movements.length === 0
-      ? `<tr><td colspan="7" class="empty-cell">No se han registrado movimientos de inventario aún.</td></tr>`
+      ? `<tr><td colspan="7" class="empty-cell">
+          <p class="empty-title">No se han registrado movimientos de inventario aún</p>
+          <p class="empty-subtitle">Cuando ingreses un lote o registres una venta en el POS, aparecerá aquí la trazabilidad completa.</p>
+        </td></tr>`
       : movements
           .map((m) => {
             const dt = new Date(m.created_at).toLocaleString('es-CO', {
@@ -1525,17 +1659,17 @@ export function renderInventoryViewHTML(st) {
             const isPositive = Number(m.quantity) > 0
             return `
               <tr>
-                <td>${escapeHTML(dt)}</td>
-                <td><span class="status-badge badge-neutral">${escapeHTML(m.movement_type)}</span></td>
+                <td class="mono cell-nowrap">${escapeHTML(dt)}</td>
+                <td class="cell-nowrap"><span class="status-badge badge-neutral">${escapeHTML(m.movement_type)}</span></td>
                 <td>
                   <strong>${escapeHTML(m.product_name)}</strong>
                   <div class="cell-sub">${escapeHTML(m.product_sku)}</div>
                 </td>
-                <td class="mono">${escapeHTML(m.lot_number || '—')}</td>
-                <td class="num ${isPositive ? 'text-success' : 'text-danger'}">
+                <td class="mono cell-nowrap">${escapeHTML(m.lot_number || '—')}</td>
+                <td class="num cell-nowrap ${isPositive ? 'text-success' : 'text-danger'}">
                   <strong>${isPositive ? `+${m.quantity}` : m.quantity} ${escapeHTML(m.product_unit)}</strong>
                 </td>
-                <td class="num">${m.previous_stock} → <strong>${m.new_stock}</strong></td>
+                <td class="num cell-nowrap">${m.previous_stock} → <strong>${m.new_stock}</strong></td>
                 <td>
                   <div>${escapeHTML(m.reason)}</div>
                   <div class="cell-sub">Responsable: ${escapeHTML(m.user_name)}</div>
@@ -1584,7 +1718,7 @@ export function renderInventoryViewHTML(st) {
               (p) => `
               <div class="stock-alert-card alert-critical">
                 <div>
-                  <span class="status-badge badge-danger">AGOTADO</span>
+                  <span class="status-badge badge-danger">${icon('alert', 12)} Agotado</span>
                   <strong>${escapeHTML(p.name)}</strong>
                   <small>SKU: ${escapeHTML(p.sku)} · Mínimo requerido: ${p.min_stock} ${escapeHTML(p.unit)}</small>
                 </div>
@@ -1598,7 +1732,7 @@ export function renderInventoryViewHTML(st) {
               (p) => `
               <div class="stock-alert-card alert-low">
                 <div>
-                  <span class="status-badge badge-warning">STOCK BAJO (${p.available_stock} ${escapeHTML(p.unit)})</span>
+                  <span class="status-badge badge-warning">${icon('alert', 12)} Stock bajo (${formatQty(p.available_stock, p.unit)})</span>
                   <strong>${escapeHTML(p.name)}</strong>
                   <small>SKU: ${escapeHTML(p.sku)} · Mínimo requerido: ${p.min_stock} ${escapeHTML(p.unit)}</small>
                 </div>
@@ -1660,7 +1794,10 @@ export function renderSalesViewHTML(st) {
 
   const rowsHTML =
     sales.length === 0
-      ? `<tr><td colspan="7" class="empty-cell">No se encontraron ventas para los filtros seleccionados.</td></tr>`
+      ? `<tr><td colspan="7" class="empty-cell">
+          <p class="empty-title">No se encontraron ventas para los filtros seleccionados</p>
+          <p class="empty-subtitle">Ajusta el rango de fechas o limpia los filtros para consultar el historial.</p>
+        </td></tr>`
       : sales
           .map((s) => {
             const dt = new Date(s.created_at).toLocaleString('es-CO', {
@@ -1672,12 +1809,12 @@ export function renderSalesViewHTML(st) {
               .join(', ')
             return `
               <tr>
-                <td class="mono"><strong>${escapeHTML(s.folio)}</strong></td>
-                <td>${escapeHTML(dt)}</td>
-                <td>${escapeHTML(s.seller_name)} <span class="text-muted">(@${escapeHTML(s.seller_username)})</span></td>
-                <td><span class="status-badge badge-neutral">${escapeHTML(s.payment_method_name)}</span></td>
+                <td class="mono cell-nowrap"><strong>${escapeHTML(s.folio)}</strong></td>
+                <td class="mono cell-nowrap">${escapeHTML(dt)}</td>
+                <td class="cell-nowrap">${escapeHTML(s.seller_name)} <span class="text-muted">(@${escapeHTML(s.seller_username)})</span></td>
+                <td class="cell-nowrap"><span class="status-badge badge-neutral">${escapeHTML(s.payment_method_name)}</span></td>
                 <td class="cell-truncate" title="${escapeHTML(itemsSummary)}">${escapeHTML(itemsSummary)}</td>
-                <td class="num"><strong>${formatCOP(s.total)}</strong></td>
+                <td class="num cell-nowrap"><strong>${formatCOP(s.total)}</strong></td>
                 <td class="actions-cell">
                   <button type="button" class="btn btn-outline btn-xs" data-sale-receipt="${s.id}">
                     ${icon('printer', 12)} Comprobante

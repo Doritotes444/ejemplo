@@ -17,6 +17,7 @@ export const LS_KEYS = {
   ACTIVE_SESSION: 'tiendapp_active_session_v4',
   UI_SETTINGS: 'tiendapp_ui_settings_v4',
   TOUR_STATE: 'tiendapp_tour_state_v4',
+  NOTIFICATIONS: 'tiendapp_notifications_v1',
 }
 
 const DEFAULT_UI_SETTINGS = {
@@ -295,6 +296,158 @@ export function syncTourProgress(productsCount, salesCount) {
   }
   return cur
 }
+
+/**
+ * Gestión del Historial de Notificaciones Persistente y Alertas del Sistema
+ */
+export function getStoredNotificationsSync(role = 'all') {
+  try {
+    const raw = localStorage.getItem(LS_KEYS.NOTIFICATIONS)
+    const list = raw ? JSON.parse(raw) : []
+    if (!Array.isArray(list)) return []
+    if (role === 'dueno') {
+      return list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    }
+    return list
+      .filter((n) => n.role_scope === 'all' || n.role_scope === 'tendero')
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+  } catch {
+    return []
+  }
+}
+
+export function saveNotificationSync({
+  type = 'info',
+  title = '',
+  message = '',
+  dedupeKey = null,
+  role_scope = 'all',
+  action_route = null,
+}) {
+  try {
+    const raw = localStorage.getItem(LS_KEYS.NOTIFICATIONS)
+    let list = raw ? JSON.parse(raw) : []
+    if (!Array.isArray(list)) list = []
+
+    if (dedupeKey) {
+      const existing = list.find((n) => n.dedupeKey === dedupeKey)
+      if (existing) {
+        return existing
+      }
+    }
+
+    const newNotif = {
+      id: `notif_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      type, // 'info' | 'ok' | 'warning' | 'error'
+      title: String(title || ''),
+      message: String(message || ''),
+      dedupeKey: dedupeKey || null,
+      role_scope, // 'all' | 'dueno' | 'tendero'
+      action_route: action_route || null,
+      read: false,
+      created_at: new Date().toISOString(),
+    }
+
+    list.unshift(newNotif)
+    if (list.length > 100) list = list.slice(0, 100)
+    localStorage.setItem(LS_KEYS.NOTIFICATIONS, JSON.stringify(list))
+    return newNotif
+  } catch {
+    return null
+  }
+}
+
+export function markNotificationReadSync(id) {
+  try {
+    const raw = localStorage.getItem(LS_KEYS.NOTIFICATIONS)
+    let list = raw ? JSON.parse(raw) : []
+    if (!Array.isArray(list)) return []
+    list = list.map((n) => (n.id === id ? { ...n, read: true } : n))
+    localStorage.setItem(LS_KEYS.NOTIFICATIONS, JSON.stringify(list))
+    return list
+  } catch {
+    return []
+  }
+}
+
+export function markAllNotificationsReadSync(role = 'all') {
+  try {
+    const raw = localStorage.getItem(LS_KEYS.NOTIFICATIONS)
+    let list = raw ? JSON.parse(raw) : []
+    if (!Array.isArray(list)) return []
+    list = list.map((n) => {
+      if (role === 'dueno' || n.role_scope === 'all' || n.role_scope === 'tendero') {
+        return { ...n, read: true }
+      }
+      return n
+    })
+    localStorage.setItem(LS_KEYS.NOTIFICATIONS, JSON.stringify(list))
+    return list
+  } catch {
+    return []
+  }
+}
+
+export function getUnreadNotificationsCountSync(role = 'all') {
+  const notifs = getStoredNotificationsSync(role)
+  return notifs.filter((n) => !n.read).length
+}
+
+export function generateSystemAlertsSync({ products = [], lots = [], user = null }) {
+  if (!user || user.role !== 'dueno') return
+  const now = new Date()
+
+  for (const p of products) {
+    if (!p.is_active) continue
+    const stock = Number(p.available_stock || 0)
+    const minStock = Number(p.min_stock_alert || 5)
+    if (stock <= 0) {
+      saveNotificationSync({
+        type: 'error',
+        title: 'Producto Agotado',
+        message: `El producto "${p.name}" (${p.sku}) no tiene existencias disponibles.`,
+        dedupeKey: `stock_zero_${p.id}`,
+        role_scope: 'dueno',
+        action_route: 'products',
+      })
+    } else if (stock <= minStock) {
+      saveNotificationSync({
+        type: 'warning',
+        title: 'Stock Mínimo Alcanzado',
+        message: `El producto "${p.name}" cuenta con solo ${stock} ${p.unit} (mínimo: ${minStock}).`,
+        dedupeKey: `stock_low_${p.id}`,
+        role_scope: 'dueno',
+        action_route: 'products',
+      })
+    }
+  }
+
+  for (const l of lots) {
+    if (!l.expiration_date) continue
+    const expDate = new Date(`${l.expiration_date}T23:59:59`)
+    const diffDays = Math.ceil((expDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+    if (diffDays <= 0) {
+      saveNotificationSync({
+        type: 'error',
+        title: 'Lote Vencido',
+        message: `El lote ${l.lot_number} de "${l.product_name}" venció el ${l.expiration_date}.`,
+        dedupeKey: `lot_exp_${l.id}`,
+        role_scope: 'dueno',
+        action_route: 'lots',
+      })
+    } else if (diffDays <= 30) {
+      saveNotificationSync({
+        type: 'warning',
+        title: 'Lote Próximo a Vencer',
+        message: `El lote ${l.lot_number} de "${l.product_name}" vence en ${diffDays} días (${l.expiration_date}).`,
+        dedupeKey: `lot_soon_${l.id}`,
+        role_scope: 'dueno',
+        action_route: 'lots',
+      })
+    }
+  }
+}
+
 
 /**
  * Asegura únicamente las categorías base (sin agregar productos falsos automáticamente)

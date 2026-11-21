@@ -1,5 +1,5 @@
 /**
- * css/base.css — Reset Tipográfico y Primitivas de Interfaz
+ * css/base.css — Tipografía Base, Primitivas de Control y Accesibilidad WCAG 2.2
  */
 
 *,
@@ -16,8 +16,8 @@ body {
   background-color: var(--bg-canvas);
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: 13.5px;
-  line-height: 1.45;
+  font-size: var(--text-base);
+  line-height: 1.48;
   letter-spacing: -0.006em;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -48,42 +48,75 @@ button {
 
 button:disabled {
   cursor: not-allowed;
-  opacity: 0.48;
+  opacity: 0.46;
 }
 
-/* Entradas de formulario */
+/* Foco visible de alto contraste (WCAG 2.2 2.4.7 & 2.4.13) */
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+/* Entradas de formulario (altura cómoda 38px) */
 input[type="text"],
 input[type="search"],
 input[type="number"],
 input[type="password"],
 input[type="date"],
-select {
+select,
+textarea {
   width: 100%;
-  height: 34px;
-  padding: 0 10px;
+  min-height: 38px;
+  padding: 0 12px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-default);
   background-color: var(--bg-surface);
   color: var(--text-primary);
-  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+  font-size: var(--text-base);
+  transition: border-color 0.14s ease, box-shadow 0.14s ease, background-color 0.14s ease;
 }
 
-input:hover,
-select:hover {
+textarea {
+  min-height: 88px;
+  padding: 10px 12px;
+  resize: vertical;
+  line-height: 1.45;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-muted);
+  opacity: 0.85;
+}
+
+input:hover:not(:disabled),
+select:hover:not(:disabled),
+textarea:hover:not(:disabled) {
   border-color: var(--border-strong);
 }
 
 input:focus,
-select:focus {
+select:focus,
+textarea:focus {
   outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent-subtle);
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 3px var(--accent-subtle);
 }
 
-/* Números tabulares para precios, cantidades y folios */
+/* Cifras tabulares para comparar precios COP, cantidades, totales y folios */
 .num,
 .mono,
-input[type="number"] {
+input[type="number"],
+.tile-price,
+.cart-line-subtotal,
+.summary-row,
+.kpi-value,
+.metric-val,
+.change-box strong {
   font-variant-numeric: tabular-nums;
 }
 
@@ -108,38 +141,42 @@ input[type="number"] {
   color: var(--danger);
 }
 
-/* Botones */
+/* Sistema unificado de botones (cumple target size WCAG 2.2 2.5.8) */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  height: 34px;
-  padding: 0 12px;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 14px;
   border-radius: var(--radius-sm);
   border: 1px solid transparent;
-  font-weight: 500;
-  font-size: 13px;
+  font-weight: 600;
+  font-size: var(--text-sm);
   white-space: nowrap;
-  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+  transition: background-color 0.14s ease, border-color 0.14s ease, color 0.14s ease, transform 0.08s ease;
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(0.5px);
 }
 
 .btn-lg {
-  height: 40px;
-  font-size: 13.5px;
-  font-weight: 600;
+  min-height: 44px;
+  padding: 0 18px;
+  font-size: var(--text-base);
 }
 
 .btn-sm {
-  height: 28px;
-  padding: 0 10px;
-  font-size: 12px;
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: var(--text-sm);
 }
 
 .btn-xs {
-  height: 24px;
-  padding: 0 8px;
-  font-size: 11.5px;
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
   border-radius: var(--radius-xs);
 }
 
@@ -178,13 +215,15 @@ input[type="number"] {
 }
 
 .btn-danger {
-  background-color: var(--danger);
+  background-color: var(--danger-solid);
   color: #ffffff;
 }
 
 .btn-icon {
-  width: 30px;
-  height: 30px;
+  min-width: 36px;
+  min-height: 36px;
+  width: 36px;
+  height: 36px;
   padding: 0;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-default);
@@ -193,11 +232,13 @@ input[type="number"] {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: background-color 0.12s ease, color 0.12s ease;
+  flex-shrink: 0;
+  transition: background-color 0.14s ease, color 0.14s ease, border-color 0.14s ease;
 }
 
 .btn-icon:hover:not(:disabled) {
   background-color: var(--bg-subtle);
+  border-color: var(--border-strong);
   color: var(--text-primary);
 }
 
@@ -206,14 +247,15 @@ input[type="number"] {
   background-color: transparent;
 }
 
-/* Etiquetas de estado */
+/* Etiquetas de estado (siempre con texto y/o icono, nunca solo color) */
 .status-badge {
   display: inline-flex;
   align-items: center;
-  height: 20px;
-  padding: 0 7px;
+  gap: 4px;
+  min-height: 22px;
+  padding: 0 8px;
   border-radius: var(--radius-xs);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
   letter-spacing: 0.01em;
   white-space: nowrap;
@@ -227,7 +269,7 @@ input[type="number"] {
 
 .badge-accent {
   background-color: var(--accent-subtle);
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .badge-success {
@@ -247,4 +289,35 @@ input[type="number"] {
 
 .svg-icon {
   flex-shrink: 0;
+}
+
+@media (max-width: 900px) {
+  input[type="text"],
+  input[type="search"],
+  input[type="number"],
+  input[type="password"],
+  input[type="date"],
+  select {
+    min-height: 42px;
+    font-size: 15px;
+  }
+
+  .btn {
+    min-height: 42px;
+  }
+
+  .btn-sm {
+    min-height: 38px;
+  }
+
+  .btn-xs {
+    min-height: 36px;
+  }
+
+  .btn-icon {
+    min-width: 38px;
+    min-height: 38px;
+    width: 38px;
+    height: 38px;
+  }
 }

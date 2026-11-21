@@ -1,85 +1,127 @@
 /**
- * css/theme.css — Tokens de Diseño y Paleta de Color Refinada (Kairo POS)
- * Inspiración: Linear / Vercel / Raycast / macOS Native.
- * Sin gradientes decorativos ni sombras exageradas.
+ * css/theme.css — Sistema Visual Propio y Tokens Semánticos (Kairo POS)
+ * Paleta deliberada para mostrador diurno (claro) y operación nocturna (oscuro)
+ * verificada contra WCAG 2.2 AA (>= 4.5:1 texto, >= 3:1 bordes y foco).
  */
 
 :root,
 html[data-theme="light"] {
   color-scheme: light;
-  --font-sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+  /* Tipografía */
+  --font-sans: "Inter", "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
-  --bg-canvas: #f8f9fa;
+  /* Escala tipográfica corta (5 niveles) */
+  --text-xs: 11.5px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+
+  /* Escala de espaciado (ritmo 4px) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+
+  /* Superficies y fondos (neutro cálido de papel técnico) */
+  --bg-canvas: #f5f6f4;
   --bg-surface: #ffffff;
-  --bg-subtle: #f1f3f5;
-  --bg-hover: #eaecef;
-  --bg-active: #e2e5e9;
+  --bg-subtle: #ecefe9;
+  --bg-hover: #e3e7df;
+  --bg-active: #d6dcd2;
 
-  --text-primary: #0f1419;
-  --text-secondary: #495057;
-  --text-muted: #868e96;
+  /* Jerarquía de texto (todos >= 5.6:1 en tema claro) */
+  --text-primary: #111714;
+  --text-secondary: #39443e;
+  --text-muted: #526058;
 
-  --border-subtle: #e9ecef;
-  --border-default: #dee2e6;
-  --border-strong: #adb5bd;
+  /* Bordes y divisores */
+  --border-subtle: #e4e8e1;
+  --border-default: #cfd6cc;
+  --border-strong: #86938a;
 
+  /* Acción principal y foco */
   --accent: #1d4ed8;
   --accent-hover: #1e40af;
   --accent-fg: #ffffff;
-  --accent-subtle: rgba(29, 78, 216, 0.08);
+  --accent-text: #1d4ed8;
+  --accent-subtle: rgba(29, 78, 216, 0.09);
+  --focus-ring: #1d4ed8;
 
-  --brand-mark-bg: #0f1419;
+  /* Marca (conserva identidad Kairo) */
+  --brand-mark-bg: #111714;
   --brand-mark-fg: #ffffff;
-  --brand-mark-border: #212529;
+  --brand-mark-border: #252f29;
 
-  --success: #15803d;
+  /* Estados semánticos (>= 5.3:1 sobre sus fondos suaves) */
+  --success: #146c3a;
   --success-bg: #dcfce7;
-  --warning: #b45309;
+  --warning: #92400e;
   --warning-bg: #fef3c7;
   --danger: #b91c1c;
+  --danger-solid: #b91c1c;
   --danger-bg: #fee2e2;
 
-  --radius-xs: 4px;
-  --radius-sm: 6px;
-  --radius-md: 8px;
+  /* Radios coherentes (3 tamaños + píldora) */
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 14px;
+  --radius-pill: 999px;
 
-  --shadow-subtle: 0 1px 2px rgba(15, 20, 25, 0.04);
-  --shadow-dialog: 0 12px 32px rgba(15, 20, 25, 0.14);
+  /* Elevación contenida */
+  --shadow-subtle: 0 1px 2px rgba(17, 23, 20, 0.05);
+  --shadow-card: 0 2px 6px rgba(17, 23, 20, 0.06);
+  --shadow-dialog: 0 18px 42px rgba(17, 23, 20, 0.18);
 }
 
 html[data-theme="dark"] {
   color-scheme: dark;
-  --bg-canvas: #090b0e;
-  --bg-surface: #101318;
-  --bg-subtle: #161a22;
-  --bg-hover: #1c212b;
-  --bg-active: #242b38;
 
-  --text-primary: #f1f3f5;
-  --text-secondary: #adb5bd;
-  --text-muted: #6c757d;
+  /* Superficies tonales elevadas (Material 3 dark surfaces) */
+  --bg-canvas: #0b0e13;
+  --bg-surface: #121720;
+  --bg-subtle: #1a212e;
+  --bg-hover: #222b3b;
+  --bg-active: #2b364a;
 
-  --border-subtle: #1c212b;
-  --border-default: #252c39;
-  --border-strong: #374151;
+  /* Jerarquía de texto (todos >= 6.1:1 en tema oscuro) */
+  --text-primary: #f1f5f9;
+  --text-secondary: #c5cedb;
+  --text-muted: #98a4b5;
 
-  --accent: #3b82f6;
-  --accent-hover: #2563eb;
+  /* Bordes y divisores */
+  --border-subtle: #1f2735;
+  --border-default: #2d3748;
+  --border-strong: #5c6b82;
+
+  /* Acción principal (>= 5.17:1 con texto blanco) y enlaces/foco luminosos (>= 9.9:1) */
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
   --accent-fg: #ffffff;
-  --accent-subtle: rgba(59, 130, 246, 0.14);
+  --accent-text: #93c5fd;
+  --accent-subtle: rgba(59, 130, 246, 0.18);
+  --focus-ring: #93c5fd;
 
-  --brand-mark-bg: #161a22;
+  /* Marca (conserva identidad Kairo) */
+  --brand-mark-bg: #1a212e;
   --brand-mark-fg: #f8fafc;
-  --brand-mark-border: #252c39;
+  --brand-mark-border: #2d3748;
 
+  /* Estados semánticos luminosos (>= 9:1 en oscuro) */
   --success: #4ade80;
-  --success-bg: rgba(74, 222, 128, 0.12);
+  --success-bg: rgba(34, 197, 94, 0.16);
   --warning: #fbbf24;
-  --warning-bg: rgba(251, 191, 36, 0.12);
-  --danger: #f87171;
-  --danger-bg: rgba(248, 113, 113, 0.14);
+  --warning-bg: rgba(245, 158, 11, 0.17);
+  --danger: #fca5a5;
+  --danger-solid: #b91c1c;
+  --danger-bg: rgba(239, 68, 68, 0.18);
 
-  --shadow-subtle: 0 1px 2px rgba(0, 0, 0, 0.35);
-  --shadow-dialog: 0 16px 40px rgba(0, 0, 0, 0.65);
+  --shadow-subtle: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.35);
+  --shadow-dialog: 0 20px 48px rgba(0, 0, 0, 0.72);
 }

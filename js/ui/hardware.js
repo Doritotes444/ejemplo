@@ -73,6 +73,134 @@ export function handleScannedCode(rawCode) {
 }
 
 /**
+ * Inicia la captura de código de barras por cámara con liberación garantizada de recursos.
+ */
+export function startCameraBarcodeReader({
+  elementId = 'barcode-camera-reader',
+  statusBarEl = null,
+  onDetected = () => {},
+  onError = () => {},
+}) {
+  let stopped = false
+  let activeStream = null
+  let html5ScannerInstance = null
+
+  async function stop() {
+    if (stopped) return
+    stopped = true
+    if (html5ScannerInstance) {
+      try {
+        await html5ScannerInstance.stop()
+        await html5ScannerInstance.clear()
+      } catch {
+        // ignore
+      }
+      html5ScannerInstance = null
+    }
+    if (activeStream) {
+      try {
+        activeStream.getTracks().forEach((t) => {
+          try {
+            t.stop()
+          } catch {
+            // ignore
+          }
+        })
+      } catch {
+        // ignore
+      }
+      activeStream = null
+    }
+    const container = typeof elementId === 'string' ? document.getElementById(elementId) : elementId
+    if (container) {
+      container.innerHTML = ''
+    }
+  }
+
+  if (typeof window.Html5Qrcode === 'function') {
+    try {
+      html5ScannerInstance = new window.Html5Qrcode(elementId)
+      html5ScannerInstance
+        .start(
+          { facingMode: { ideal: 'environment' } },
+          {
+            fps: 10,
+            qrbox: { width: 260, height: 130 },
+          },
+          async (decodedText) => {
+            if (stopped) return
+            const codeStr = String(decodedText ?? '').trim()
+            if (!codeStr) return
+            playScannerBeep()
+            await stop()
+            onDetected(codeStr)
+          },
+          () => {}
+        )
+        .then(() => {
+          if (stopped) {
+            stop()
+            return
+          }
+          if (statusBarEl) {
+            statusBarEl.textContent = 'Cámara trasera activa: enfoca el código de barras.'
+          }
+        })
+        .catch((err) => {
+          if (stopped) return
+          if (statusBarEl) {
+            statusBarEl.textContent = `Cámara no disponible: ${err?.message || 'permiso denegado'}. Puedes ingresar el código manualmente.`
+          }
+          onError(err)
+        })
+    } catch (err) {
+      if (statusBarEl) {
+        statusBarEl.textContent = `No se pudo iniciar la cámara: ${err?.message || 'error'}.`
+      }
+      onError(err)
+    }
+  } else if (navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function') {
+    navigator.mediaDevices
+      .getUserMedia({
+        video: { facingMode: { ideal: 'environment' } },
+        audio: false,
+      })
+      .then((stream) => {
+        if (stopped) {
+          stream.getTracks().forEach((t) => t.stop())
+          return
+        }
+        activeStream = stream
+        const container = typeof elementId === 'string' ? document.getElementById(elementId) : elementId
+        if (container) {
+          container.innerHTML = `
+            <video playsinline autoplay muted style="width: 100%; height: 100%; object-fit: cover;"></video>
+          `
+          const video = container.querySelector('video')
+          if (video) video.srcObject = stream
+        }
+        if (statusBarEl) {
+          statusBarEl.textContent = 'Cámara activa (visor). Enfoca el código o ingrésalo manualmente.'
+        }
+      })
+      .catch((err) => {
+        if (statusBarEl) {
+          statusBarEl.textContent = `Cámara no disponible: ${err?.message || 'permiso denegado'}. Ingresa el código manualmente.`
+        }
+        onError(err)
+      })
+  } else {
+    const err = new Error('El navegador no admite cámara o el contexto no es seguro.')
+    if (statusBarEl) {
+      statusBarEl.textContent = err.message
+    }
+    onError(err)
+  }
+
+  return { stop }
+}
+
+/**
  * 1. Lector de Código de Barras con Cámara (html5-qrcode vía CDN)
  */
 export function openBarcodeScannerModal() {

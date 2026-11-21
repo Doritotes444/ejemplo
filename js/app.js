@@ -2,7 +2,11 @@ import { initTheme } from './core/theme.js'
 import { isOwner } from './core/permissions.js'
 import { initRouter, parseCurrentRoute, navigateTo } from './core/router.js'
 import { fetchAuthStatus } from './core/session.js'
-import { getPrivateReviewsLocal, getUISettingsSync } from './core/localStore.js'
+import {
+  getPrivateReviewsLocal,
+  getUISettingsSync,
+  generateSystemAlertsSync,
+} from './core/localStore.js'
 import {
   getState,
   setState,
@@ -56,12 +60,19 @@ export async function refreshAllData() {
     patch.sales = salesData.sales || []
     patch.salesSummary = salesData.summary
     patch.users = users
+
+    generateSystemAlertsSync({
+      products,
+      lots: patch.lots || [],
+      user: st.user,
+    })
   }
 
   setState(patch, false)
   syncCartWithProducts(products)
   setState({ cart: getState().cart }, true)
 }
+
 
 async function handleAuthenticated(user) {
   const initialRoute = isOwner(user) ? parseCurrentRoute() : 'pos'

@@ -1,5 +1,6 @@
 import { roundMoney } from './utils/money.js'
 import { roundQty, clampQty, isBulkUnit } from './utils/quantities.js'
+import { saveNotificationSync } from './core/localStore.js'
 
 /**
  * Gestión Centralizada de Estado de la SPA y Operaciones del Carrito POS.
@@ -51,8 +52,13 @@ const state = {
   salesFilterProduct: '',
   salesFilterMethod: '',
 
-  // Notificación discreta
+  // Notificación discreta y panel de historial
   toast: null,
+  notificationsOpen: false,
+
+  // Selección táctil en POS móvil (a una mano)
+  posSelectedProductId: null,
+  posSelectedQty: 1,
 }
 
 const listeners = new Set()
@@ -84,10 +90,48 @@ export function emitStateChange() {
 }
 
 let toastTimer = null
-export function showToast(type, message, durationMs = 3800) {
-  if (toastTimer) clearTimeout(toastTimer)
-  state.toast = { type, message, id: Date.now() }
+
+export function dismissToast() {
+  if (toastTimer) {
+    clearTimeout(toastTimer)
+    toastTimer = null
+  }
+  if (state.toast) {
+    state.toast = null
+    emitStateChange()
+  }
+}
+
+export function showToast(type, message, durationMs = 3800, options = {}) {
+  if (toastTimer) {
+    clearTimeout(toastTimer)
+    toastTimer = null
+  }
+  state.toast = {
+    type,
+    message,
+    id: Date.now(),
+    actionText: options.actionText || null,
+    actionRoute: options.actionRoute || null,
+  }
   emitStateChange()
+
+  // Guardar en el historial de notificaciones persistente si corresponde
+  if (options.saveToHistory !== false && message) {
+    try {
+      saveNotificationSync({
+        type: type === 'ok' ? 'ok' : type === 'error' ? 'error' : 'info',
+        title: options.title || (type === 'ok' ? 'Operación exitosa' : type === 'error' ? 'Aviso o error' : 'Información'),
+        message,
+        dedupeKey: options.dedupeKey || null,
+        role_scope: options.role_scope || 'all',
+        action_route: options.action_route || null,
+      })
+    } catch {
+      // Ignorar fallos de persistencia
+    }
+  }
+
   if (durationMs > 0) {
     const currentId = state.toast.id
     toastTimer = setTimeout(() => {
@@ -98,6 +142,7 @@ export function showToast(type, message, durationMs = 3800) {
     }, durationMs)
   }
 }
+
 
 // =============================================================================
 // Lógica pura del Carrito POS

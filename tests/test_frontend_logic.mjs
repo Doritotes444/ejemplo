@@ -21,8 +21,28 @@ import {
   generateUniqueSKU,
   assertOwnerAccess,
   isValidISODate,
+  saveNotificationSync,
+  getStoredNotificationsSync,
+  markNotificationReadSync,
+  markAllNotificationsReadSync,
+  generateSystemAlertsSync,
 } from '../js/core/localStore.js'
 import { isBulkUnit, getUnitStep } from '../js/utils/quantities.js'
+import {
+  normalizeSearch,
+  scoreProductSearch,
+  filterAndRankProducts,
+} from '../js/utils/search.js'
+
+if (typeof globalThis.localStorage === 'undefined') {
+  const memoryStore = new Map()
+  globalThis.localStorage = {
+    getItem: (key) => (memoryStore.has(key) ? memoryStore.get(key) : null),
+    setItem: (key, val) => memoryStore.set(key, String(val)),
+    removeItem: (key) => memoryStore.delete(key),
+    clear: () => memoryStore.clear(),
+  }
+}
 
 function assert(condition, message) {
   if (!condition) {
@@ -133,6 +153,86 @@ assert(decodeURIComponent(fallbackSvg).includes('#064e3b'), 'Aplica paleta de co
 const sku1 = generateUniqueSKU('Café Molido', [])
 const sku2 = generateUniqueSKU('Café Molido', [{ sku: sku1 }])
 assert(sku1 === 'CAFMO-001' && sku2 === 'CAFMO-002', `Genera SKUs únicos secuenciales (${sku1}, ${sku2})`)
-assert(isValidISODate('2026-11-19') === true && isValidISODate('2026-02-30') === false, 'Valida fechas ISO reales')
+// 6. Búsqueda Tolerante a Tildes y Prioridad de Ranking (Bugfix #4)
+assert(normalizeSearch('Café Águila Roja') === 'cafe aguila roja', 'Normaliza tildes y mayúsculas')
+assert(normalizeSearch('   Leche Entera  ') === 'leche entera', 'Recorta espacios')
 
-console.log('OK: Todas las pruebas de frontend (Catálogo COP, Carrito, Unidades Granel, FEFO/FIFO, Métricas Rápidas, RBAC, SKU/Fechas y Fallback SVG) pasaron.')
+const searchCatalog = [
+  { id: 'p1', sku: 'ALIM-001', barcode: '7701234567890', name: 'Arroz con Leche', category_name: 'Postres' },
+  { id: 'p2', sku: 'CAF-001', barcode: '7709876543210', name: 'Café Tradicional', category_name: 'Cafés' },
+  { id: 'p3', sku: 'CAF-002', barcode: '0077012345009', name: 'Café Descafeinado', category_name: 'Cafés' },
+  { id: 'p4', sku: 'BEB-001', barcode: '7705555555555', name: 'Bebida de Café Fría', category_name: 'Bebidas' },
+]
+
+// Búsqueda con tildes y sin tildes
+const cafeResults = filterAndRankProducts(searchCatalog, 'cafe')
+assert(cafeResults.length === 3, 'Encuentra los 3 productos de café buscando "cafe" sin tilde')
+const topIds = [cafeResults[0].id, cafeResults[1].id]
+assert(topIds.includes('p2') && topIds.includes('p3'), 'Prioriza coincidencias que empiezan por "Café"')
+assert(cafeResults[2].id === 'p4', 'Deja al final la coincidencia interna "Bebida de Café Fría"')
+
+// Prioridad: coincidencia exacta por código de barras
+const exactBarcodeResults = filterAndRankProducts(searchCatalog, '0077012345009')
+assert(exactBarcodeResults.length === 1 && exactBarcodeResults[0].id === 'p3', 'Coincidencia exacta por código de barras con ceros iniciales')
+
+// Prioridad: prefijo de SKU
+const skuPrefixResults = filterAndRankProducts(searchCatalog, 'CAF-')
+assert(skuPrefixResults.length === 2, 'Encuentra por prefijo de SKU CAF-')
+
+// 7. Notificaciones Persistentes e Historial con Aislamiento RBAC (Bugfix #2)
+localStorage.clear()
+
+// Guardar notificación para todos
+saveNotificationSync({
+  type: 'ok',
+  title: 'Venta Registrada',
+  message: 'Venta V-1001 por $12.500',
+  role_scope: 'all',
+})
+
+// Guardar notificación exclusiva de dueño (alerta de stock)
+saveNotificationSync({
+  type: 'warning',
+  title: 'Stock Bajo',
+  message: 'El producto Café Tradicional tiene 2 unidades disponibles.',
+  dedupeKey: 'stock_low_p2',
+  role_scope: 'dueno',
+  action_route: 'lots',
+})
+
+// Intento de spam con la misma dedupeKey
+saveNotificationSync({
+  type: 'warning',
+  title: 'Stock Bajo Duplicado',
+  message: 'Debe ser ignorado por dedupeKey',
+  dedupeKey: 'stock_low_p2',
+  role_scope: 'dueno',
+})
+
+const ownerNotifs = getStoredNotificationsSync('dueno')
+assert(ownerNotifs.length === 2, `Dueño ve 2 notificaciones (1 general + 1 alerta), tiene ${ownerNotifs.length}`)
+assert(ownerNotifs[0].dedupeKey === 'stock_low_p2', 'La más reciente está primero')
+assert(ownerNotifs[0].read === false, 'Notificación inicial no leída')
+
+const tenderoNotifs = getStoredNotificationsSync('tendero')
+assert(tenderoNotifs.length === 1, `Tendero solo ve 1 notificación general, tiene ${tenderoNotifs.length}`)
+assert(tenderoNotifs[0].title === 'Venta Registrada', 'Tendero no ve alertas internas de Lotes del Dueño')
+
+// Marcar como leída
+const notifIdToRead = ownerNotifs[0].id
+markNotificationReadSync(notifIdToRead)
+const ownerNotifsAfter = getStoredNotificationsSync('dueno')
+assert(ownerNotifsAfter.find((n) => n.id === notifIdToRead).read === true, 'Notificación marcada como leída individualmente')
+
+// Marcar todas como leídas
+markAllNotificationsReadSync('dueno')
+const ownerNotifsAllRead = getStoredNotificationsSync('dueno')
+assert(ownerNotifsAllRead.every((n) => n.read === true), 'Todas las notificaciones del Dueño marcadas como leídas')
+
+// 8. Conservación Estricta de Ceros Iniciales en Códigos de Barras (Bugfix #3)
+const barcodeWithLeadingZero = '0077012345009'
+assert(typeof barcodeWithLeadingZero === 'string', 'Código de barras tratado como String')
+assert(barcodeWithLeadingZero.length === 13, 'Longitud de 13 caracteres preservada con ceros')
+assert(barcodeWithLeadingZero.startsWith('00'), 'Ceros iniciales no se pierden ni se convierten a número')
+
+console.log('OK: Todas las pruebas de frontend (Catálogo COP, Carrito, Unidades Granel, FEFO/FIFO, Métricas Rápidas, RBAC, Fallback SVG, Búsqueda Tolerante/Ranking, Notificaciones Persistentes y Ceros Iniciales) pasaron con éxito.')

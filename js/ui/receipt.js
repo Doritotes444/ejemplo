@@ -125,9 +125,36 @@ export function openSaleReceiptModal(sale) {
       </div>
     `,
     onMount(modal) {
+      let isPrinting = false
       modal.querySelector('#btn-print-receipt')?.addEventListener('click', () => {
-        window.print()
+        if (isPrinting) return
+        isPrinting = true
+
+        const receiptEl = modal.querySelector('#printable-receipt')
+        let printRoot = document.getElementById('print-root')
+        if (!printRoot) {
+          printRoot = document.createElement('div')
+          printRoot.id = 'print-root'
+          printRoot.setAttribute('aria-hidden', 'true')
+          document.body.appendChild(printRoot)
+        }
+
+        printRoot.innerHTML = receiptEl ? receiptEl.outerHTML : ''
+
+        const cleanup = () => {
+          window.removeEventListener('afterprint', cleanup)
+          if (printRoot) printRoot.innerHTML = ''
+          isPrinting = false
+        }
+        window.addEventListener('afterprint', cleanup)
+
+        try {
+          window.print()
+        } catch {
+          cleanup()
+        }
       })
     },
   })
 }
+
